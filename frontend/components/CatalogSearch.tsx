@@ -1,11 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { api, CatalogAnime } from '@/lib/api';
-
-const FORMAT_LABELS: Record<string, string> = {
-  TV: 'TV', TV_SHORT: 'TV corto', MOVIE: 'Película', SPECIAL: 'Especial', OVA: 'OVA', ONA: 'ONA', MUSIC: 'Música',
-};
+import { api, CatalogAnime, FORMAT_LABELS } from '@/lib/api';
 
 /** Buscador con autocompletado contra el catálogo de AniList. */
 export function CatalogSearch({ onSelect }: { onSelect: (a: CatalogAnime) => void }) {

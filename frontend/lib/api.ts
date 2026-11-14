@@ -37,7 +37,46 @@ export interface CatalogAnime {
   format: string | null;
   year: number | null;
   airing_status: string | null;
+  season: string | null;
+  genres: string[];
+  score: number | null;
 }
+
+export interface BrowseFilters {
+  search?: string;
+  genres?: string[];
+  tags?: string[];
+  year?: number;
+  season?: string;
+  formats?: string[];
+  status?: string;
+  sort?: string;
+  page?: number;
+}
+
+export interface BrowseResult {
+  results: CatalogAnime[];
+  page: number;
+  hasNextPage: boolean;
+  total: number;
+}
+
+export interface FilterOptions {
+  genres: string[];
+  tags: { name: string; category: string }[];
+}
+
+export const SEASON_LABELS: Record<string, string> = { WINTER: 'Invierno', SPRING: 'Primavera', SUMMER: 'Verano', FALL: 'Otoño' };
+export const FORMAT_LABELS: Record<string, string> = {
+  TV: 'TV', TV_SHORT: 'TV corto', MOVIE: 'Película', SPECIAL: 'Especial', OVA: 'OVA', ONA: 'ONA', MUSIC: 'Música',
+};
+export const AIRING_LABELS: Record<string, string> = {
+  RELEASING: 'En emisión', FINISHED: 'Finalizado', NOT_YET_RELEASED: 'Próximamente', CANCELLED: 'Cancelado', HIATUS: 'En pausa',
+};
+export const SORT_LABELS: Record<string, string> = {
+  POPULARITY_DESC: 'Popularidad', TRENDING_DESC: 'Tendencia', SCORE_DESC: 'Puntuación',
+  START_DATE_DESC: 'Más recientes', TITLE_ROMAJI: 'Título (A-Z)', SEARCH_MATCH: 'Relevancia',
+};
 
 export type AniListStatus = 'CURRENT' | 'PLANNING' | 'COMPLETED' | 'DROPPED' | 'PAUSED' | 'REPEATING';
 
@@ -103,6 +142,15 @@ export const api = {
   next: (id: string) => request<Anime>(`/animes/${id}/progress/next`, { method: 'POST' }),
   prev: (id: string) => request<Anime>(`/animes/${id}/progress/prev`, { method: 'POST' }),
   searchCatalog: (q: string) => request<CatalogAnime[]>(`/catalog/search?q=${encodeURIComponent(q)}`),
+  browseCatalog: (f: BrowseFilters) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(f)) {
+      if (v === undefined || v === '' || (Array.isArray(v) && !v.length)) continue;
+      q.set(k, Array.isArray(v) ? v.join(',') : String(v));
+    }
+    return request<BrowseResult>(`/catalog/browse?${q}`);
+  },
+  catalogFilters: () => request<FilterOptions>('/catalog/filters'),
   importAniList: (body: { username: string; statuses?: AniListStatus[]; include_favorites?: boolean }) =>
     request<ImportResult>('/animes/import/anilist', { method: 'POST', body: JSON.stringify(body) }),
 };

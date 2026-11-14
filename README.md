@@ -19,6 +19,7 @@ zebanitracker/
 - Reglas automáticas: llegar al último capítulo → *Completado*; marcar *Completado* rellena el progreso; no se puede superar el total.
 - **Integración con AniList** (API GraphQL pública y gratuita, sin API key):
   - Buscador con autocompletado al crear un anime (web y extensión) que rellena título, portada y total de capítulos.
+  - **Explorar** (`/explore`): catálogo de AniList con filtros de búsqueda, géneros, etiquetas, año, temporada, formato, estado de emisión y orden; agrega con un clic como *Viendo* o *Pendiente*.
   - **Importar / sincronizar** tu lista pública de AniList por nombre de usuario (`/import`): estados, progreso y favoritos. Se puede repetir sin crear duplicados; nunca retrocede tu progreso ni borra notas o enlaces.
 - Extensión: detecta el anime y el capítulo desde el título de la pestaña (p. ej. `Frieren Episodio 12 - AnimeFLV`). Si ya está en tu lista lo marca visto con un clic; si no, lo agrega con el enlace de la página.
 
@@ -74,14 +75,16 @@ Se despliega en Vercel con el preset **NestJS** (entrada `src/main.ts`).
 | PATCH | `/api/animes/:id/progress` `{ "episode": 12 }` | Fijar último capítulo visto |
 | POST | `/api/animes/:id/progress/next` | +1 capítulo |
 | POST | `/api/animes/:id/progress/prev` | −1 capítulo |
-| GET | `/api/catalog/search?q=frieren` | Buscar en el catálogo de AniList |
+| GET | `/api/catalog/search?q=frieren` | Autocompletado en el catálogo de AniList |
+| GET | `/api/catalog/browse?search=&genres=Action,Fantasy&tags=Magic&year=2023&season=FALL&formats=TV,MOVIE&status=FINISHED&sort=SCORE_DESC&page=1` | Explorar con filtros (24 por página) |
+| GET | `/api/catalog/filters` | Géneros y etiquetas disponibles |
 | POST | `/api/animes/import/anilist` `{ "username": "...", "statuses"?: ["CURRENT","COMPLETED"], "include_favorites"?: true }` | Importar/sincronizar lista de AniList |
 | GET | `/api/health` | Healthcheck (público) |
 | GET | `/api/health/anilist` | Verifica la conexión con AniList (público) |
 
 Estados: `watching`, `completed`, `plan_to_watch`, `on_hold`, `dropped`.
 
-**AniList:** límite de 90 peticiones/min (a veces reducido temporalmente a 30). Las búsquedas se cachean 10 minutos en el backend y la web espera 400 ms antes de buscar. Estados de AniList → app: `CURRENT`/`REPEATING` → Viendo, `PLANNING` → Pendiente, `COMPLETED` → Completado, `PAUSED` → En pausa, `DROPPED` → Abandonado. La lista de AniList del usuario debe ser pública.
+**AniList:** límite de 90 peticiones/min (a veces reducido temporalmente a 30). Las búsquedas se cachean 10 minutos en el backend y la web espera 400 ms antes de buscar. Valores de filtros: `season` = `WINTER`/`SPRING`/`SUMMER`/`FALL`; `formats` = `TV`, `TV_SHORT`, `MOVIE`, `SPECIAL`, `OVA`, `ONA`, `MUSIC`; `status` = `RELEASING`, `FINISHED`, `NOT_YET_RELEASED`, `CANCELLED`, `HIATUS`; `sort` = `POPULARITY_DESC`, `TRENDING_DESC`, `SCORE_DESC`, `START_DATE_DESC`, `TITLE_ROMAJI`, `SEARCH_MATCH`. Estados de AniList → app: `CURRENT`/`REPEATING` → Viendo, `PLANNING` → Pendiente, `COMPLETED` → Completado, `PAUSED` → En pausa, `DROPPED` → Abandonado. La lista de AniList del usuario debe ser pública.
 
 ## Frontend (Next.js)
 

@@ -11,6 +11,7 @@ export function Header() {
       <Link href="/" className="brand">📺 ZebaniTracker</Link>
       {session && (
         <nav className="row">
+          <Link href="/explore" className="btn">Explorar</Link>
           <Link href="/import" className="btn">Importar de AniList</Link>
           <Link href="/animes/new" className="btn primary">+ Nuevo anime</Link>
           <span className="muted small">{session.user.email}</span>
