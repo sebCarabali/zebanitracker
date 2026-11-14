@@ -52,7 +52,7 @@ export function AnimeForm({ initial, submitLabel, onSubmit }: {
   }
 
   return (
-    <form className="form" onSubmit={handle}>
+    <form className="form panel" onSubmit={handle}>
       <CatalogSearch onSelect={pick} />
       {anilistId && (
         <p className="linked small">
@@ -79,7 +79,7 @@ export function AnimeForm({ initial, submitLabel, onSubmit }: {
           </select>
         </label>
         <label className="check">
-          <input type="checkbox" checked={favorite} onChange={(e) => setFavorite(e.target.checked)} /> Favorito ★
+          <input type="checkbox" checked={favorite} onChange={(e) => setFavorite(e.target.checked)} /> Favorito
         </label>
       </div>
       <label>URL de portada
@@ -92,7 +92,7 @@ export function AnimeForm({ initial, submitLabel, onSubmit }: {
         <textarea rows={3} maxLength={5000} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </label>
       {error && <p className="error">{error}</p>}
-      <button className="btn primary" disabled={saving}>{saving ? 'Guardando…' : submitLabel}</button>
+      <button className="btn primary lg" disabled={saving}>{saving ? 'Guardando…' : submitLabel}</button>
     </form>
   );
 }

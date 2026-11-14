@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PostgrestError } from '@supabase/supabase-js';
 import { SupabaseService } from '../supabase/supabase.service.js';
-import { AniListService, AniListListStatus } from '../anilist/anilist.service.js';
+import { AniListService, AniListListStatus, CatalogAnime } from '../anilist/anilist.service.js';
 import { AnimeStatus, CreateAnimeDto, ImportAniListDto, ListAnimesQuery, UpdateAnimeDto } from './dto/anime.dto.js';
 
 export interface Anime {
@@ -16,6 +16,10 @@ export interface Anime {
   source_url: string | null;
   notes: string | null;
   anilist_id: number | null;
+  airing_status: string | null;
+  aired_episodes: number | null;
+  next_episode_at: string | null;
+  episodes_synced_at: string | null;
   last_watched_at: string | null;
   created_at: string;
   updated_at: string;
@@ -60,7 +64,14 @@ export class AnimesService {
     const row = this.normalize(dto);
     const { data, error } = await this.table(token).insert(row).select().single();
     if (error) this.fail(error);
-    return data as Anime;
+    const created = data as Anime;
+    // Completa capítulos y datos de emisión desde AniList; si AniList falla, el anime igual queda creado.
+    try {
+      await this.syncEpisodes(token, { ids: [created.id], force: true });
+      return await this.findOne(token, created.id);
+    } catch {
+      return created;
+    }
   }
 
   async update(token: string, id: string, dto: UpdateAnimeDto): Promise<Anime> {
@@ -136,6 +147,7 @@ export class AnimesService {
         status,
         cover_url: m.cover_url,
         is_favorite: (local?.is_favorite ?? false) || favourites.has(m.anilist_id),
+        ...airingFields(m),
       };
 
       if (local) {
@@ -165,6 +177,83 @@ export class AnimesService {
       created: inserts.length,
       updated: updates.length,
       favorites: favourites.size,
+    };
+  }
+
+  /**
+   * Completa el total de capítulos y los datos de emisión desde AniList.
+   * - Animes vinculados: una petición por cada 50.
+   * - Animes sin vincular y sin total: busca por título (máx. 5 por llamada) y solo vincula
+   *   si el título coincide exactamente, para no enlazar el anime equivocado.
+   * - Sin `force`, solo revisa lo desactualizado: en emisión cada 6 h, el resto cada 7 días.
+   */
+  async syncEpisodes(token: string, opts: { ids?: string[]; force?: boolean } = {}) {
+    let query = this.table(token).select(
+      'id, title, anilist_id, total_episodes, watched_episodes, cover_url, airing_status, episodes_synced_at',
+    );
+    if (opts.ids?.length) query = query.in('id', opts.ids);
+    const { data, error } = await query;
+    if (error) this.fail(error);
+    const rows = (data ?? []) as Anime[];
+
+    const now = Date.now();
+    const stale = (a: Anime) => {
+      if (opts.force || !a.episodes_synced_at) return true;
+      const age = now - new Date(a.episodes_synced_at).getTime();
+      return age > (a.airing_status === 'RELEASING' || a.airing_status === 'NOT_YET_RELEASED' ? 6 : 7 * 24) * 3600_000;
+    };
+    const candidates = rows.filter(stale);
+    const usedIds = new Set(rows.map((a) => a.anilist_id).filter(Boolean));
+
+    // Vincular por título los que no tienen anilist_id ni total
+    const newLinks = new Map<string, number>();
+    const unlinked = candidates.filter((a) => !a.anilist_id && a.total_episodes === null).slice(0, 5);
+    for (const a of unlinked) {
+      const results = await this.anilist.search(a.title);
+      const t = normTitle(a.title);
+      const hit = results.find(
+        (r) => [r.title, r.title_romaji, r.title_english].some((x) => x && normTitle(x) === t) && !usedIds.has(r.anilist_id),
+      );
+      if (hit) {
+        newLinks.set(a.id, hit.anilist_id);
+        usedIds.add(hit.anilist_id);
+      }
+    }
+
+    const toFetch = candidates.filter((a) => a.anilist_id || newLinks.has(a.id));
+    const media = await this.anilist.byIds(toFetch.map((a) => (a.anilist_id ?? newLinks.get(a.id))!));
+    const syncedAt = new Date().toISOString();
+
+    const updates: { id: string; row: Record<string, unknown> }[] = [];
+    for (const a of candidates) {
+      const anilistId = a.anilist_id ?? newLinks.get(a.id);
+      const m = anilistId ? media.get(anilistId) : undefined;
+      if (!m) {
+        updates.push({ id: a.id, row: { episodes_synced_at: syncedAt } }); // evita reintentar en cada carga
+        continue;
+      }
+      const row: Record<string, unknown> = { ...airingFields(m), episodes_synced_at: syncedAt };
+      if (!a.anilist_id) row.anilist_id = anilistId;
+      if (!a.cover_url && m.cover_url) row.cover_url = m.cover_url;
+      // Solo se acepta el total de AniList si no deja el progreso por encima del total
+      if (m.total_episodes !== null && m.total_episodes >= a.watched_episodes && m.total_episodes !== a.total_episodes) {
+        row.total_episodes = m.total_episodes;
+      }
+      updates.push({ id: a.id, row });
+    }
+
+    for (let i = 0; i < updates.length; i += 10) {
+      const results = await Promise.all(
+        updates.slice(i, i + 10).map((u) => this.table(token).update(u.row).eq('id', u.id)),
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) this.fail(failed.error);
+    }
+
+    return {
+      checked: candidates.length,
+      updated: updates.filter((u) => Object.keys(u.row).length > 1).length,
+      linked: newLinks.size,
     };
   }
 
@@ -219,4 +308,13 @@ const STATUS_MAP: Record<AniListListStatus, AnimeStatus> = {
 
 function normTitle(t: string): string {
   return t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+}
+
+function airingFields(m: CatalogAnime) {
+  return {
+    airing_status: m.airing_status,
+    aired_episodes: m.aired_episodes,
+    next_episode_at: m.next_episode_at,
+    episodes_synced_at: new Date().toISOString(),
+  };
 }

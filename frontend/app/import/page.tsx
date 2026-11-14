@@ -45,14 +45,18 @@ export default function ImportPage() {
   }
 
   return (
-    <div className="narrow">
-      <h1>Importar desde AniList</h1>
-      <p className="muted">
+    <main className="container">
+    <div className="narrow" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <span className="eyebrow">AniList</span>
+        <h1 style={{ marginTop: 8 }}>Importa tu lista</h1>
+      </div>
+      <p className="muted" style={{ margin: 0 }}>
         Trae tu lista pública de <a href="https://anilist.co" target="_blank" rel="noreferrer">AniList</a> con estados,
         progreso y favoritos. Puedes repetirlo cuando quieras para sincronizar: no crea duplicados, no retrocede tu
         progreso y conserva tus notas y enlaces.
       </p>
-      <form className="form" onSubmit={submit}>
+      <form className="form panel" onSubmit={submit}>
         <label>Usuario de AniList
           <input
             required minLength={2} maxLength={20} pattern="[A-Za-z0-9_\-]+"
@@ -61,12 +65,11 @@ export default function ImportPage() {
           />
         </label>
         <fieldset className="chips">
-          <legend className="muted small">Listas a importar</legend>
+          <legend className="section-label">Listas a importar</legend>
           {ALL.map((s) => (
-            <label key={s} className={`chip ${statuses.includes(s) ? 'on' : ''}`}>
-              <input type="checkbox" checked={statuses.includes(s)} onChange={() => toggle(s)} />
+            <button key={s} type="button" className="chip" aria-pressed={statuses.includes(s)} onClick={() => toggle(s)}>
               {ANILIST_STATUS_LABELS[s]}
-            </label>
+            </button>
           ))}
         </fieldset>
         <label className="check">
@@ -74,13 +77,13 @@ export default function ImportPage() {
           Marcar como ★ mis favoritos de AniList
         </label>
         {error && <p className="error">{error}</p>}
-        <button className="btn primary" disabled={busy || statuses.length === 0}>
+        <button className="btn primary lg" disabled={busy || statuses.length === 0}>
           {busy ? 'Importando…' : 'Importar'}
         </button>
       </form>
 
       {result && (
-        <div className="result">
+        <div className="panel result-box">
           <p className="ok">✓ Importación completada para <strong>{result.username}</strong></p>
           <ul>
             <li>{result.found} animes en su lista ({result.selected} seleccionados)</li>
@@ -92,5 +95,6 @@ export default function ImportPage() {
         </div>
       )}
     </div>
+    </main>
   );
 }

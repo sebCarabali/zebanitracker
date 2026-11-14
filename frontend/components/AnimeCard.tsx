@@ -2,82 +2,124 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { api, Anime, STATUS_LABELS } from '@/lib/api';
+import { Anime, api, knownEpisodes, relativeTime, STATUS_COLORS, STATUS_LABELS } from '@/lib/api';
+import { Cover } from './Cover';
+import { StarIcon } from './Icons';
 
-export function ProgressBar({ watched, total }: { watched: number; total: number | null }) {
-  const pct = total ? Math.round((watched / total) * 100) : 0;
-  return (
-    <div className="progress" title={total ? `${pct}%` : 'Total desconocido'}>
-      <div className="progress-fill" style={{ width: total ? `${pct}%` : '0%' }} />
-      <span className="progress-label">
-        {watched} / {total ?? '?'} {total ? `· ${pct}%` : ''}
-      </span>
-    </div>
-  );
+export function pctOf(a: Anime) {
+  const total = knownEpisodes(a);
+  return total ? Math.min(100, Math.round((a.watched_episodes / total) * 100)) : 0;
 }
 
-export function AnimeCard({ anime, onChange, onDelete }: {
-  anime: Anime;
-  onChange: (a: Anime) => void;
-  onDelete: (id: string) => void;
-}) {
+/** "12 / 28", "5 / 8 emitidos", "5 / ?" */
+export function episodesLabel(a: Anime) {
+  if (a.total_episodes) return `${a.watched_episodes}/${a.total_episodes}`;
+  if (a.aired_episodes) return `${a.watched_episodes}/${a.aired_episodes} emitidos`;
+  return `${a.watched_episodes}/?`;
+}
+
+export function nextEpisodeLabel(a: Anime) {
+  if (!a.next_episode_at || a.airing_status !== 'RELEASING') return null;
+  const n = (a.aired_episodes ?? 0) + 1;
+  return `Cap. ${n} ${relativeTime(a.next_episode_at)}`;
+}
+
+function useRunner(onChange: (a: Anime) => void) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  async function run(fn: () => Promise<Anime | void>) {
+  async function run(fn: () => Promise<Anime>) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fn();
-      if (res) onChange(res);
+      onChange(await fn());
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
+  return { busy, error, run };
+}
 
-  const done = anime.total_episodes !== null && anime.watched_episodes >= anime.total_episodes;
+export function ProgressBar({ pct, color }: { pct: number; color?: string }) {
+  return (
+    <div className="progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+      <div style={{ width: `${pct}%`, background: color }} />
+    </div>
+  );
+}
 
+export function FavButton({ anime, onChange }: { anime: Anime; onChange: (a: Anime) => void }) {
+  const { busy, run } = useRunner(onChange);
+  return (
+    <button
+      className={`fav ${anime.is_favorite ? 'on' : ''}`}
+      aria-label={anime.is_favorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+      aria-pressed={anime.is_favorite}
+      disabled={busy}
+      onClick={(e) => { e.preventDefault(); run(() => api.toggleFavorite(anime.id)); }}
+    >
+      <StarIcon filled={anime.is_favorite} />
+    </button>
+  );
+}
+
+/** Tarjeta grande de "Continúa viendo". */
+export function ContinueCard({ anime, onChange }: { anime: Anime; onChange: (a: Anime) => void }) {
+  const { busy, error, run } = useRunner(onChange);
+  const limit = knownEpisodes(anime);
+  const done = limit !== null && anime.watched_episodes >= limit;
+  const pct = pctOf(anime);
+  const next = nextEpisodeLabel(anime);
+  return (
+    <article className="continue">
+      <Link href={`/animes/${anime.id}`} aria-hidden="true" tabIndex={-1}>
+        <Cover src={anime.cover_url} title={anime.title} />
+      </Link>
+      <div className="continue-body">
+        <div>
+          <h3><Link href={`/animes/${anime.id}`}>{anime.title}</Link></h3>
+          <span className="muted small">{next ?? STATUS_LABELS[anime.status]}</span>
+        </div>
+        <div className="count">
+          <strong>{anime.watched_episodes}</strong>
+          <span className="muted small">/ {anime.total_episodes ?? anime.aired_episodes ?? '?'} caps.</span>
+          {anime.total_episodes ? <span className="pct">{pct}%</span> : null}
+        </div>
+        <ProgressBar pct={pct} />
+        <div className="continue-actions">
+          <button className="btn icon" aria-label="Quitar un capítulo" disabled={busy || anime.watched_episodes === 0} onClick={() => run(() => api.prev(anime.id))}>−</button>
+          <button className="btn primary" disabled={busy || done} onClick={() => run(() => api.next(anime.id))}>
+            {done ? (anime.airing_status === 'RELEASING' ? 'Al día' : 'Terminado') : `Visto cap. ${anime.watched_episodes + 1}`}
+          </button>
+        </div>
+        {error && <span className="error small">{error}</span>}
+      </div>
+    </article>
+  );
+}
+
+/** Tarjeta de la biblioteca. */
+export function AnimeCard({ anime, onChange }: { anime: Anime; onChange: (a: Anime) => void }) {
+  const color = STATUS_COLORS[anime.status];
+  const next = nextEpisodeLabel(anime);
   return (
     <article className="card">
-      <div className="cover">
-        {anime.cover_url ? <img src={anime.cover_url} alt="" /> : <span>{anime.title.slice(0, 1)}</span>}
-        <button
-          className={`fav ${anime.is_favorite ? 'on' : ''}`}
-          aria-label={anime.is_favorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
-          disabled={busy}
-          onClick={() => run(() => api.toggleFavorite(anime.id))}
-        >
-          {anime.is_favorite ? '★' : '☆'}
-        </button>
+      <div style={{ position: 'relative' }}>
+        <Link href={`/animes/${anime.id}`} className="card-link" tabIndex={-1} aria-hidden="true">
+          <Cover src={anime.cover_url} title={anime.title}>
+            <span className="pill" style={{ color }}><span className="dot" />{STATUS_LABELS[anime.status]}</span>
+            {next && <span className="airing-pill">{next}</span>}
+          </Cover>
+        </Link>
+        <FavButton anime={anime} onChange={onChange} />
       </div>
       <div className="card-body">
-        <h3 title={anime.title}>{anime.title}</h3>
-        <span className={`badge ${anime.status}`}>{STATUS_LABELS[anime.status]}</span>
-        <ProgressBar watched={anime.watched_episodes} total={anime.total_episodes} />
-        <div className="row">
-          <button className="btn" disabled={busy || anime.watched_episodes === 0} onClick={() => run(() => api.prev(anime.id))}>
-            −1
-          </button>
-          <button className="btn primary grow" disabled={busy || done} onClick={() => run(() => api.next(anime.id))}>
-            {done ? 'Terminado' : `Visto cap. ${anime.watched_episodes + 1}`}
-          </button>
+        <h3 title={anime.title}><Link href={`/animes/${anime.id}`} style={{ color: 'inherit' }}>{anime.title}</Link></h3>
+        <div className="progress-row">
+          <ProgressBar pct={pctOf(anime)} color={color} />
+          <span>{episodesLabel(anime)}</span>
         </div>
-        <div className="row small">
-          <Link href={`/animes/${anime.id}`}>Editar</Link>
-          {anime.source_url && <a href={anime.source_url} target="_blank" rel="noreferrer">Ver ↗</a>}
-          <button
-            className="link danger"
-            disabled={busy}
-            onClick={() => {
-              if (confirm(`¿Eliminar "${anime.title}"?`)) run(async () => { await api.remove(anime.id); onDelete(anime.id); });
-            }}
-          >
-            Eliminar
-          </button>
-        </div>
-        {error && <p className="error small">{error}</p>}
       </div>
     </article>
   );

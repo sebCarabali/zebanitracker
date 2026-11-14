@@ -7,8 +7,13 @@ import { AnimeForm } from '@/components/AnimeForm';
 export default function NewAnimePage() {
   const router = useRouter();
   return (
-    <div className="narrow">
-      <h1>Nuevo anime</h1>
+    <main className="container">
+    <div className="narrow" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <span className="eyebrow">Agregar</span>
+        <h1 style={{ marginTop: 8 }}>Nuevo anime</h1>
+        <p className="muted" style={{ marginBottom: 0 }}>Búscalo en AniList para completar portada y capítulos automáticamente.</p>
+      </div>
       <AnimeForm
         submitLabel="Crear"
         onSubmit={async (input) => {
@@ -17,5 +22,6 @@ export default function NewAnimePage() {
         }}
       />
     </div>
+    </main>
   );
 }

@@ -84,3 +84,8 @@ export class ImportAniListDto {
   @IsOptional() @IsBoolean()
   include_favorites?: boolean;
 }
+
+export class SyncEpisodesDto {
+  @IsOptional() @IsBoolean()
+  force?: boolean;
+}

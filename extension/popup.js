@@ -6,12 +6,51 @@ import { detectFromTab, findMatch } from './lib/detect.js';
 const $ = (id) => document.getElementById(id);
 const show = (el, visible) => el.classList.toggle('hidden', !visible);
 
+const STATUS = {
+  watching: ['Viendo', '#7C9CFF'],
+  completed: ['Completado', '#3DDC97'],
+  plan_to_watch: ['Pendiente', '#C9C9D6'],
+  on_hold: ['En pausa', '#FFB547'],
+  dropped: ['Abandonado', '#FF7A7A'],
+};
+const TONES = ['#3B5B7A', '#7A3B5E', '#3B6B55', '#3D3B7A', '#6B3B3B', '#7A5A2E', '#2E6A7A', '#5A3B7A'];
+
 let animes = [];
 let tab = null;
 let detected = { title: '', episode: null };
 let matched = null;
+let target = 1;
+let lastMark = null; // { prev, episode } para deshacer
 let linked = null; // anime elegido del catálogo de AniList
 let searchTimer = null;
+
+/* ---------- Utilidades ---------- */
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+
+function toneFor(title) {
+  let h = 0;
+  for (const c of title) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return TONES[Math.abs(h) % TONES.length];
+}
+
+function fillCover(node, a) {
+  node.replaceChildren();
+  node.style.background = toneFor(a.title);
+  if (a.cover_url) node.append(el('img', { src: a.cover_url, alt: '' }));
+  else node.textContent = a.title.slice(0, 1);
+}
+
+const limitOf = (a) => a.total_episodes ?? a.aired_episodes ?? null;
+
+function relativeTime(iso) {
+  const h = (new Date(iso).getTime() - Date.now()) / 3600_000;
+  const rtf = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });
+  return Math.abs(h) < 24 ? rtf.format(Math.round(h), 'hour') : rtf.format(Math.round(h / 24), 'day');
+}
 
 function msg(text, type = 'ok') {
   $('msg').textContent = text;
@@ -24,12 +63,16 @@ function handleError(e) {
   msg(e.message, 'error');
 }
 
+function replaceAnime(updated) {
+  animes = animes.map((a) => (a.id === updated.id ? updated : a));
+  if (matched?.id === updated.id) matched = updated;
+}
+
 /* ---------- Login ---------- */
 function renderLogin() {
   show($('view-login'), true);
   show($('view-app'), false);
-  show($('logout'), false);
-  $('user').textContent = '';
+  show($('footer'), false);
 }
 
 $('signup-link').href = `${CONFIG.WEB_URL}/login`;
@@ -57,7 +100,7 @@ async function renderApp() {
   if (!session) return renderLogin();
   show($('view-login'), false);
   show($('view-app'), true);
-  show($('logout'), true);
+  show($('footer'), true);
   $('user').textContent = session.email ?? '';
 
   [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -68,39 +111,103 @@ async function renderApp() {
   } catch (e) {
     return handleError(e);
   }
-  renderPageTab();
+  matched = findMatch(animes, detected.title);
+  target = matched ? clampTarget(detected.episode ?? matched.watched_episodes + 1) : 1;
+  renderPage();
   renderList();
 }
 
-function renderPageTab() {
-  matched = findMatch(animes, detected.title);
-  show($('match'), !!matched);
-  show($('add-form'), !matched);
+function clampTarget(n) {
+  const limit = matched ? limitOf(matched) : null;
+  return Math.max(1, limit ? Math.min(limit, n) : n);
+}
 
-  if (matched) {
-    $('match-title').textContent = matched.title;
-    $('match-progress').textContent = `Vas en el capítulo ${matched.watched_episodes} de ${matched.total_episodes ?? '?'}`;
-    $('match-episode').value = detected.episode ?? matched.watched_episodes + 1;
-    if (matched.total_episodes != null) $('match-episode').max = matched.total_episodes;
+/* ---------- Tarjeta del anime detectado ---------- */
+function renderPage() {
+  show($('match'), !!matched);
+  if (!matched) {
+    if ($('add-form').classList.contains('hidden')) {
+      show($('add-form'), true);
+      prefillAdd();
+    }
+    return;
+  }
+  show($('add-form'), false);
+  const a = matched;
+  const limit = limitOf(a);
+  fillCover($('match-cover'), a);
+  $('match-title').textContent = a.title;
+  $('match-progress').textContent = `Vas en el cap. ${a.watched_episodes} de ${a.total_episodes ?? (a.aired_episodes ? `${a.aired_episodes} emitidos` : '?')}`;
+  $('match-bar').style.width = `${a.total_episodes ? Math.min(100, Math.round((a.watched_episodes / a.total_episodes) * 100)) : 0}%`;
+  const airing = a.airing_status === 'RELEASING' && a.next_episode_at;
+  show($('match-airing'), !!airing);
+  if (airing) $('match-airing').textContent = `Cap. ${(a.aired_episodes ?? 0) + 1} sale ${relativeTime(a.next_episode_at)}`;
+
+  show($('mark-row'), !lastMark);
+  show($('done-row'), !!lastMark);
+  if (lastMark) {
+    $('done-text').textContent = `Cap. ${lastMark.episode} marcado como visto`;
   } else {
-    prefillAdd();
+    $('ep-value').textContent = target;
+    $('ep-dec').disabled = target <= 1;
+    $('ep-inc').disabled = limit !== null && target >= limit;
+    const done = limit !== null && a.watched_episodes >= limit && target <= a.watched_episodes;
+    $('match-set').textContent = done ? 'Estás al día' : `Marcar cap. ${target}`;
+    $('match-set').disabled = done;
   }
 }
 
+$('ep-dec').addEventListener('click', () => { target = clampTarget(target - 1); renderPage(); });
+$('ep-inc').addEventListener('click', () => { target = clampTarget(target + 1); renderPage(); });
+
+$('match-set').addEventListener('click', async () => {
+  const prev = matched.watched_episodes;
+  $('match-set').disabled = true;
+  try {
+    replaceAnime(await api.setProgress(matched.id, target));
+    lastMark = { prev, episode: target };
+    renderPage();
+    renderList();
+  } catch (e) {
+    handleError(e);
+    renderPage();
+  }
+});
+
+$('undo').addEventListener('click', async () => {
+  try {
+    replaceAnime(await api.setProgress(matched.id, lastMark.prev));
+    target = clampTarget(lastMark.episode);
+    lastMark = null;
+    renderPage();
+    renderList();
+  } catch (e) { handleError(e); }
+});
+
+$('match-add-new').addEventListener('click', () => {
+  matched = null;
+  lastMark = null;
+  show($('match'), false);
+  show($('add-form'), true);
+  prefillAdd();
+});
+
+/* ---------- Agregar nuevo ---------- */
 function prefillAdd() {
   $('add-title').value = detected.title;
   $('add-watched').value = detected.episode ?? 0;
+  $('add-total').value = '';
   setLinked(null);
   searchCatalog(detected.title);
 }
 
-/* ---------- Catálogo AniList ---------- */
 function setLinked(a) {
   linked = a;
   show($('linked'), !!a);
   if (a) {
     $('linked-cover').src = a.cover_url ?? '';
-    $('linked-text').textContent = `AniList: ${a.title} · ${a.total_episodes ?? '?'} caps.`;
+    const eps = a.total_episodes ?? (a.aired_episodes ? `${a.aired_episodes} emitidos` : '?');
+    $('linked-text').textContent = `AniList: ${a.title} · ${eps} caps.`;
   }
 }
 
@@ -111,11 +218,12 @@ async function searchCatalog(term) {
     const results = (await api.searchCatalog(term.trim())).slice(0, 5);
     list.replaceChildren();
     for (const a of results) {
+      const eps = a.total_episodes ? `${a.total_episodes} caps.` : a.aired_episodes ? `${a.aired_episodes} emitidos` : null;
       const btn = el('button', { type: 'button' },
         el('img', { src: a.cover_url ?? '', alt: '' }),
         el('span', { className: 'info' },
           el('strong', { textContent: a.title }),
-          el('span', { className: 'small muted', textContent: [a.year, a.total_episodes ? `${a.total_episodes} caps.` : null].filter(Boolean).join(' · ') }),
+          el('span', { className: 'small muted', textContent: [a.year, eps].filter(Boolean).join(' · ') }),
         ),
       );
       btn.onclick = () => {
@@ -140,23 +248,6 @@ $('add-title').addEventListener('input', () => {
 });
 $('unlink').addEventListener('click', () => { setLinked(null); searchCatalog($('add-title').value); });
 
-$('match-set').addEventListener('click', async () => {
-  const ep = Number($('match-episode').value);
-  try {
-    const updated = await api.setProgress(matched.id, ep);
-    animes = animes.map((a) => (a.id === updated.id ? updated : a));
-    msg(`✓ ${updated.title}: capítulo ${updated.watched_episodes} marcado`);
-    renderPageTab();
-    renderList();
-  } catch (e) { handleError(e); }
-});
-
-$('match-add-new').addEventListener('click', () => {
-  show($('match'), false);
-  show($('add-form'), true);
-  prefillAdd();
-});
-
 $('add-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const total = $('add-total').value;
@@ -172,70 +263,76 @@ $('add-form').addEventListener('submit', async (e) => {
       ...(linked ? { anilist_id: linked.anilist_id, cover_url: linked.cover_url } : {}),
     });
     animes = [created, ...animes];
+    matched = created;
+    target = clampTarget(created.watched_episodes + 1);
+    lastMark = null;
     msg(`✓ "${created.title}" agregado`);
-    renderPageTab();
+    renderPage();
     renderList();
   } catch (err) { handleError(err); }
 });
 
-/* ---------- Lista ---------- */
-function el(tag, props = {}, ...children) {
-  const node = Object.assign(document.createElement(tag), props);
-  node.append(...children);
-  return node;
-}
-
+/* ---------- Mi lista ---------- */
 function renderList() {
   const q = $('search').value.trim().toLowerCase();
-  const items = animes.filter((a) => a.title.toLowerCase().includes(q));
+  const order = { watching: 0, on_hold: 1, plan_to_watch: 2, completed: 3, dropped: 4 };
+  const items = animes
+    .filter((a) => a.title.toLowerCase().includes(q))
+    .sort((a, b) => order[a.status] - order[b.status] || (b.updated_at ?? '').localeCompare(a.updated_at ?? ''));
   const list = $('list');
   list.replaceChildren();
   if (!items.length) {
-    list.append(el('li', { className: 'muted small', textContent: animes.length ? 'Sin resultados' : 'Aún no tienes animes' }));
+    list.append(el('li', { className: 'muted small empty', textContent: animes.length ? 'Sin resultados' : 'Aún no tienes animes' }));
     return;
   }
   for (const a of items) {
-    const pct = a.total_episodes ? Math.round((a.watched_episodes / a.total_episodes) * 100) : 0;
-    const done = a.total_episodes != null && a.watched_episodes >= a.total_episodes;
+    const [label, color] = STATUS[a.status] ?? STATUS.watching;
+    const limit = limitOf(a);
+    const done = limit !== null && a.watched_episodes >= limit;
+    const pct = a.total_episodes ? Math.min(100, Math.round((a.watched_episodes / a.total_episodes) * 100)) : 0;
 
-    const fav = el('button', { className: `fav ${a.is_favorite ? 'on' : ''}`, textContent: a.is_favorite ? '★' : '☆', title: 'Favorito' });
+    const cover = el('div', { className: 'cover' });
+    fillCover(cover, a);
+
+    const fav = el('button', {
+      className: `fav ${a.is_favorite ? 'on' : ''}`, textContent: a.is_favorite ? '★' : '☆',
+      ariaLabel: a.is_favorite ? `Quitar ${a.title} de favoritos` : `Agregar ${a.title} a favoritos`,
+    });
+    fav.setAttribute('aria-pressed', String(a.is_favorite));
     fav.onclick = () => update(api.toggleFavorite(a.id));
 
-    const input = el('input', { type: 'number', min: 0, value: a.watched_episodes, className: 'ep-input' });
-    if (a.total_episodes != null) input.max = a.total_episodes;
-    const set = el('button', { className: 'btn', textContent: 'Fijar' });
-    set.onclick = () => update(api.setProgress(a.id, Number(input.value)));
-    const next = el('button', { className: 'btn primary grow', textContent: done ? 'Terminado' : `+1 (cap. ${a.watched_episodes + 1})`, disabled: done });
+    const next = el('button', { className: 'btn', textContent: done ? '✓' : '+1', disabled: done });
+    next.setAttribute('aria-label', done ? `${a.title}: al día` : `Marcar capítulo ${a.watched_episodes + 1} de ${a.title}`);
     next.onclick = () => update(api.next(a.id));
 
-    list.append(
-      el('li', {},
-        el('div', { className: 'row' }, el('span', { className: 'title grow', textContent: a.title, title: a.title }), fav),
-        el('div', { className: 'bar' }, el('div', { style: `width:${pct}%` })),
-        el('span', { className: 'small muted', textContent: `${a.watched_episodes} / ${a.total_episodes ?? '?'}` }),
-        el('div', { className: 'row' }, input, set, next),
+    const bar = el('div', { className: 'bar' }, el('div'));
+    bar.firstChild.style.width = `${pct}%`;
+    bar.firstChild.style.background = color;
+
+    const dot = el('span', { className: 'dot' });
+    dot.style.background = color;
+
+    list.append(el('li', { className: 'item' },
+      cover,
+      el('div', { className: 'info' },
+        el('span', { className: 'title', textContent: a.title, title: a.title }),
+        el('span', { className: 'meta' }, dot, `${label} · ${a.watched_episodes}/${a.total_episodes ?? a.aired_episodes ?? '?'}`),
+        bar,
       ),
-    );
+      fav,
+      next,
+    ));
   }
 }
 
 async function update(promise) {
   try {
-    const updated = await promise;
-    animes = animes.map((a) => (a.id === updated.id ? updated : a));
+    replaceAnime(await promise);
     renderList();
-    renderPageTab();
+    renderPage();
   } catch (e) { handleError(e); }
 }
 
 $('search').addEventListener('input', renderList);
-
-document.querySelectorAll('.tabs button').forEach((btn) =>
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b === btn));
-    show($('tab-page'), btn.dataset.tab === 'page');
-    show($('tab-list'), btn.dataset.tab === 'list');
-  }),
-);
 
 renderApp();

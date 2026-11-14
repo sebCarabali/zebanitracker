@@ -21,6 +21,9 @@ export interface Anime {
   source_url: string | null;
   notes: string | null;
   anilist_id: number | null;
+  airing_status: string | null;
+  aired_episodes: number | null;
+  next_episode_at: string | null;
   last_watched_at: string | null;
   created_at: string;
   updated_at: string;
@@ -40,6 +43,9 @@ export interface CatalogAnime {
   season: string | null;
   genres: string[];
   score: number | null;
+  aired_episodes: number | null;
+  next_episode_at: string | null;
+  next_episode: number | null;
 }
 
 export interface BrowseFilters {
@@ -98,7 +104,7 @@ export interface ImportResult {
   favorites: number;
 }
 
-export type AnimeInput = Partial<Omit<Anime, 'id' | 'created_at' | 'updated_at' | 'last_watched_at'>> & {
+export type AnimeInput = Partial<Omit<Anime, 'id' | 'created_at' | 'updated_at' | 'last_watched_at' | 'airing_status' | 'aired_episodes' | 'next_episode_at'>> & {
   title?: string;
 };
 
@@ -141,6 +147,11 @@ export const api = {
     request<Anime>(`/animes/${id}/progress`, { method: 'PATCH', body: JSON.stringify({ episode }) }),
   next: (id: string) => request<Anime>(`/animes/${id}/progress/next`, { method: 'POST' }),
   prev: (id: string) => request<Anime>(`/animes/${id}/progress/prev`, { method: 'POST' }),
+  syncEpisodes: (force = false) =>
+    request<{ checked: number; updated: number; linked: number }>('/animes/sync-episodes', {
+      method: 'POST', body: JSON.stringify({ force }),
+    }),
+  syncOne: (id: string) => request<Anime>(`/animes/${id}/sync`, { method: 'POST' }),
   searchCatalog: (q: string) => request<CatalogAnime[]>(`/catalog/search?q=${encodeURIComponent(q)}`),
   browseCatalog: (f: BrowseFilters) => {
     const q = new URLSearchParams();
@@ -154,3 +165,25 @@ export const api = {
   importAniList: (body: { username: string; statuses?: AniListStatus[]; include_favorites?: boolean }) =>
     request<ImportResult>('/animes/import/anilist', { method: 'POST', body: JSON.stringify(body) }),
 };
+
+export const STATUS_COLORS: Record<AnimeStatus, string> = {
+  watching: '#7C9CFF',
+  completed: '#3DDC97',
+  plan_to_watch: '#C9C9D6',
+  on_hold: '#FFB547',
+  dropped: '#FF7A7A',
+};
+
+/** "en 3 días", "mañana", "en 5 h" */
+export function relativeTime(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now();
+  const rtf = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });
+  const h = diff / 3600_000;
+  if (Math.abs(h) < 24) return rtf.format(Math.round(h), 'hour');
+  return rtf.format(Math.round(h / 24), 'day');
+}
+
+/** Capítulos disponibles para marcar: total conocido, si no los emitidos. */
+export function knownEpisodes(a: Pick<Anime, 'total_episodes' | 'aired_episodes'>): number | null {
+  return a.total_episodes ?? a.aired_episodes ?? null;
+}

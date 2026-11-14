@@ -18,8 +18,10 @@ export class HealthController {
       this.anilist.browse({ genres: ['Fantasy'], tags: ['Magic'], year: 2023, season: 'FALL', formats: ['TV'], status: 'FINISHED' }),
       this.anilist.filterOptions(),
     ]);
+    const byId = results[0] ? (await this.anilist.byIds([results[0].anilist_id])).get(results[0].anilist_id) : undefined;
     return {
-      ok: results.length > 0 && browse.results.length > 0 && filters.genres.length > 0,
+      ok: results.length > 0 && browse.results.length > 0 && filters.genres.length > 0 && !!byId,
+      byId: byId ? { title: byId.title, episodes: byId.total_episodes, aired: byId.aired_episodes, airing_status: byId.airing_status } : null,
       sample: results[0]?.title ?? null,
       browse: { total: browse.total, first: browse.results[0]?.title ?? null },
       filters: { genres: filters.genres.length, tags: filters.tags.length },

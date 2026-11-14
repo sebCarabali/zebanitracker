@@ -17,6 +17,11 @@ export interface CatalogAnime {
   season: string | null;
   genres: string[];
   score: number | null;
+  /** Capítulos ya emitidos (si está en emisión: el anterior al próximo; si terminó: el total). */
+  aired_episodes: number | null;
+  /** Fecha ISO del próximo capítulo, si está en emisión. */
+  next_episode_at: string | null;
+  next_episode: number | null;
 }
 
 export interface BrowseFilters {
@@ -63,6 +68,7 @@ interface RawMedia {
   status: string | null;
   genres?: string[];
   averageScore?: number | null;
+  nextAiringEpisode?: { episode: number; airingAt: number } | null;
 }
 
 const MEDIA_FIELDS = `
@@ -77,6 +83,7 @@ const MEDIA_FIELDS = `
   status
   genres
   averageScore
+  nextAiringEpisode { episode airingAt }
 `;
 
 const SEARCH_QUERY = `
@@ -103,6 +110,13 @@ query ($page: Int, $search: String, $genres: [String], $tags: [String], $year: I
     pageInfo { hasNextPage total }
     media(type: ANIME, isAdult: false, search: $search, genre_in: $genres, tag_in: $tags, seasonYear: $year,
           season: $season, format_in: $formats, status: $status, sort: $sort) { ${MEDIA_FIELDS} }
+  }
+}`;
+
+const BY_IDS_QUERY = `
+query ($ids: [Int]) {
+  Page(perPage: 50) {
+    media(id_in: $ids, type: ANIME) { ${MEDIA_FIELDS} }
   }
 }`;
 
@@ -177,6 +191,11 @@ export class AniListService {
       season: m.season ?? null,
       genres: m.genres ?? [],
       score: m.averageScore ?? null,
+      aired_episodes: m.nextAiringEpisode
+        ? m.nextAiringEpisode.episode - 1
+        : m.status === 'FINISHED' ? m.episodes : null,
+      next_episode_at: m.nextAiringEpisode ? new Date(m.nextAiringEpisode.airingAt * 1000).toISOString() : null,
+      next_episode: m.nextAiringEpisode?.episode ?? null,
     };
   }
 
@@ -223,6 +242,17 @@ export class AniListService {
     if (this.browseCache.size >= AniListService.MAX_CACHE) this.browseCache.delete(this.browseCache.keys().next().value!);
     this.browseCache.set(key, { at: Date.now(), data: result });
     return result;
+  }
+
+  /** Datos actuales de varios animes por ID de AniList (lotes de 50 = 1 petición por lote). */
+  async byIds(ids: number[]): Promise<Map<number, CatalogAnime>> {
+    const out = new Map<number, CatalogAnime>();
+    const unique = [...new Set(ids)];
+    for (let i = 0; i < unique.length; i += 50) {
+      const data = await this.query<{ Page: { media: RawMedia[] } }>(BY_IDS_QUERY, { ids: unique.slice(i, i + 50) });
+      for (const m of data.Page.media) out.set(m.id, AniListService.normalize(m));
+    }
+    return out;
   }
 
   /** Géneros y etiquetas disponibles (cambian muy poco: caché de 24 h). */

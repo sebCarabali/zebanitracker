@@ -4,7 +4,7 @@ import {
 import { SupabaseAuthGuard } from '../auth/auth.guard.js';
 import { AccessToken, UserId } from '../auth/current-user.decorator.js';
 import { AnimesService } from './animes.service.js';
-import { CreateAnimeDto, ImportAniListDto, ListAnimesQuery, SetProgressDto, UpdateAnimeDto } from './dto/anime.dto.js';
+import { CreateAnimeDto, ImportAniListDto, ListAnimesQuery, SetProgressDto, SyncEpisodesDto, UpdateAnimeDto } from './dto/anime.dto.js';
 
 @Controller('animes')
 @UseGuards(SupabaseAuthGuard)
@@ -20,6 +20,18 @@ export class AnimesController {
   @Post('import/anilist')
   importAniList(@AccessToken() token: string, @UserId() userId: string, @Body() dto: ImportAniListDto) {
     return this.animes.importFromAniList(token, userId, dto);
+  }
+
+  /** Completa capítulos y datos de emisión desde AniList (solo lo desactualizado, salvo force). */
+  @Post('sync-episodes')
+  syncEpisodes(@AccessToken() token: string, @Body() dto: SyncEpisodesDto) {
+    return this.animes.syncEpisodes(token, { force: dto.force });
+  }
+
+  @Post(':id/sync')
+  async syncOne(@AccessToken() token: string, @Param('id', ParseUUIDPipe) id: string) {
+    await this.animes.syncEpisodes(token, { ids: [id], force: true });
+    return this.animes.findOne(token, id);
   }
 
   @Get(':id')

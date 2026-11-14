@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { Brand } from '@/components/Header';
 
 type Mode = 'login' | 'signup' | 'magic';
 
@@ -44,12 +45,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth">
-      <h1>{mode === 'signup' ? 'Crear cuenta' : 'Iniciar sesión'}</h1>
-      <div className="tabs">
-        <button className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>Contraseña</button>
-        <button className={mode === 'magic' ? 'active' : ''} onClick={() => setMode('magic')}>Enlace mágico</button>
-        <button className={mode === 'signup' ? 'active' : ''} onClick={() => setMode('signup')}>Registrarse</button>
+    <main className="auth">
+      <div className="panel">
+      <Brand />
+      <h1>{mode === 'signup' ? 'Crea tu cuenta' : 'Bienvenido de vuelta'}</h1>
+      <p className="muted" style={{ margin: 0, textAlign: 'center' }}>Lleva el control de cada capítulo que ves.</p>
+      <div className="tabs" role="tablist">
+        <button role="tab" aria-selected={mode === 'login'} onClick={() => setMode('login')}>Contraseña</button>
+        <button role="tab" aria-selected={mode === 'magic'} onClick={() => setMode('magic')}>Enlace mágico</button>
+        <button role="tab" aria-selected={mode === 'signup'} onClick={() => setMode('signup')}>Registrarse</button>
       </div>
       <form className="form" onSubmit={submit}>
         <label>Correo
@@ -65,10 +69,11 @@ export default function LoginPage() {
           </label>
         )}
         {msg && <p className={msg.type === 'error' ? 'error' : 'ok'}>{msg.text}</p>}
-        <button className="btn primary" disabled={busy}>
+        <button className="btn primary lg" disabled={busy}>
           {busy ? '…' : mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Crear cuenta' : 'Enviar enlace'}
         </button>
       </form>
-    </div>
+      </div>
+    </main>
   );
 }
