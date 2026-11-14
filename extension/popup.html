@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <strong>📺 ZebaniTracker</strong>
+    <span id="user" class="muted small"></span>
+    <button id="logout" class="link hidden">Salir</button>
+  </header>
+
+  <!-- Login -->
+  <section id="view-login" class="hidden">
+    <form id="login-form" class="form">
+      <input id="email" type="email" placeholder="Correo" required autocomplete="email" />
+      <input id="password" type="password" placeholder="Contraseña" required minlength="6" autocomplete="current-password" />
+      <button class="btn primary">Iniciar sesión</button>
+      <p id="login-error" class="error small"></p>
+      <p class="muted small">¿Sin cuenta? <a id="signup-link" target="_blank">Regístrate en la web</a></p>
+    </form>
+  </section>
+
+  <!-- App -->
+  <section id="view-app" class="hidden">
+    <nav class="tabs">
+      <button data-tab="page" class="active">Esta página</button>
+      <button data-tab="list">Mis animes</button>
+    </nav>
+
+    <div id="tab-page">
+      <!-- Coincidencia con un anime existente -->
+      <div id="match" class="hidden box">
+        <p class="small muted">Detectado en tu lista</p>
+        <h3 id="match-title"></h3>
+        <p id="match-progress" class="small"></p>
+        <div class="row">
+          <input id="match-episode" type="number" min="0" class="ep-input" />
+          <button id="match-set" class="btn primary grow">Marcar como visto</button>
+        </div>
+        <button id="match-add-new" class="link small">No es este, agregar como nuevo</button>
+      </div>
+
+      <!-- Agregar nuevo -->
+      <form id="add-form" class="form hidden">
+        <label>Título<input id="add-title" required maxlength="300" /></label>
+        <div class="row">
+          <label class="grow">Último cap. visto<input id="add-watched" type="number" min="0" value="0" /></label>
+          <label class="grow">Total<input id="add-total" type="number" min="0" placeholder="?" /></label>
+        </div>
+        <label>Estado
+          <select id="add-status">
+            <option value="watching">Viendo</option>
+            <option value="plan_to_watch">Pendiente</option>
+            <option value="completed">Completado</option>
+            <option value="on_hold">En pausa</option>
+            <option value="dropped">Abandonado</option>
+          </select>
+        </label>
+        <label class="check"><input id="add-fav" type="checkbox" /> Favorito ★</label>
+        <label class="check"><input id="add-url" type="checkbox" checked /> Guardar el enlace de esta página</label>
+        <button class="btn primary">Agregar anime</button>
+      </form>
+    </div>
+
+    <div id="tab-list" class="hidden">
+      <input id="search" placeholder="Buscar…" />
+      <ul id="list"></ul>
+      <a id="open-web" class="small" target="_blank">Abrir la web ↗</a>
+    </div>
+
+    <p id="msg" class="small"></p>
+  </section>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
