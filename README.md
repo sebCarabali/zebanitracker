@@ -18,7 +18,8 @@ zebanitracker/
 - **Avance** de cada anime: barra de progreso, botón "Visto cap. N", −1, o fijar un capítulo exacto.
 - Reglas automáticas: llegar al último capítulo → *Completado*; marcar *Completado* rellena el progreso; no se puede superar el total.
 - **Total de capítulos automático** desde AniList: al crear, importar o abrir la lista se completan el total, los capítulos ya emitidos y la fecha del próximo (en emisión: cada 6 h; terminados: cada 7 días). Los animes agregados a mano sin total se vinculan solos si el título coincide exactamente.
-- **Diseño "Noche de estreno"**: tema oscuro con acento coral, Space Grotesk + Inter; cuadrícula de capítulos clicable y anillo de progreso en el detalle.
+- **Diseño** en tema claro con la paleta `#F9F5EB` (fondo), `#002B5B` (texto/encabezado), `#2D4059` (secundario), `#EA5455` (acento) y `#F07B3F` (en emisión / viendo); Space Grotesk + Inter. Para texto y botones se usa `#C73E40`, el mismo rojo un poco más oscuro, para cumplir contraste AA.
+- **Fichas del catálogo** (`/explore/:anilistId`): sinopsis, géneros y etiquetas, estudio, duración, fechas, origen, puntuación, tráiler y animes relacionados. Tu detalle (`/animes/:id`) muestra también la sinopsis cuando está vinculado a AniList.
 - **Integración con AniList** (API GraphQL pública y gratuita, sin API key):
   - Buscador con autocompletado al crear un anime (web y extensión) que rellena título, portada y total de capítulos.
   - **Explorar** (`/explore`): catálogo de AniList con filtros de búsqueda, géneros, etiquetas, año, temporada, formato, estado de emisión y orden; agrega con un clic como *Viendo* o *Pendiente*.
@@ -81,6 +82,7 @@ Se despliega en Vercel con el preset **NestJS** (entrada `src/main.ts`).
 | POST | `/api/animes/:id/sync` | Igual, para un anime |
 | GET | `/api/catalog/search?q=frieren` | Autocompletado en el catálogo de AniList |
 | GET | `/api/catalog/browse?search=&genres=Action,Fantasy&tags=Magic&year=2023&season=FALL&formats=TV,MOVIE&status=FINISHED&sort=SCORE_DESC&page=1` | Explorar con filtros (24 por página) |
+| GET | `/api/catalog/anime/:anilistId` | Ficha completa (sinopsis, estudio, relaciones…) |
 | GET | `/api/catalog/filters` | Géneros y etiquetas disponibles |
 | POST | `/api/animes/import/anilist` `{ "username": "...", "statuses"?: ["CURRENT","COMPLETED"], "include_favorites"?: true }` | Importar/sincronizar lista de AniList |
 | GET | `/api/health` | Healthcheck (público) |

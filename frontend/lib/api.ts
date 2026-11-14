@@ -48,6 +48,38 @@ export interface CatalogAnime {
   next_episode: number | null;
 }
 
+export interface AnimeDetails extends CatalogAnime {
+  description: string | null;
+  banner_url: string | null;
+  cover_large_url: string | null;
+  duration: number | null;
+  studios: string[];
+  source: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  popularity: number | null;
+  tags: string[];
+  trailer_url: string | null;
+  relations: { anilist_id: number; title: string; relation: string; format: string | null; cover_url: string | null }[];
+}
+
+export const RELATION_LABELS: Record<string, string> = {
+  PREQUEL: 'Precuela', SEQUEL: 'Secuela', PARENT: 'Historia principal', SIDE_STORY: 'Historia paralela',
+  SPIN_OFF: 'Spin-off', ALTERNATIVE: 'Versión alternativa', SUMMARY: 'Resumen', CHARACTER: 'Personajes',
+  ADAPTATION: 'Adaptación', SOURCE: 'Obra original', COMPILATION: 'Compilación', CONTAINS: 'Contiene', OTHER: 'Relacionado',
+};
+
+export const SOURCE_LABELS: Record<string, string> = {
+  ORIGINAL: 'Original', MANGA: 'Manga', LIGHT_NOVEL: 'Novela ligera', VISUAL_NOVEL: 'Novela visual', VIDEO_GAME: 'Videojuego',
+  WEB_NOVEL: 'Novela web', NOVEL: 'Novela', WEB_MANGA: 'Manga web', DOUJINSHI: 'Doujinshi', ANIME: 'Anime', GAME: 'Juego',
+  COMIC: 'Cómic', MULTIMEDIA_PROJECT: 'Proyecto multimedia', PICTURE_BOOK: 'Libro ilustrado', LIVE_ACTION: 'Live action', OTHER: 'Otro',
+};
+
+export function formatDate(iso: string | null) {
+  if (!iso) return null;
+  return new Date(iso + 'T12:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 export interface BrowseFilters {
   search?: string;
   genres?: string[];
@@ -161,17 +193,18 @@ export const api = {
     }
     return request<BrowseResult>(`/catalog/browse?${q}`);
   },
+  catalogDetails: (anilistId: number) => request<AnimeDetails>(`/catalog/anime/${anilistId}`),
   catalogFilters: () => request<FilterOptions>('/catalog/filters'),
   importAniList: (body: { username: string; statuses?: AniListStatus[]; include_favorites?: boolean }) =>
     request<ImportResult>('/animes/import/anilist', { method: 'POST', body: JSON.stringify(body) }),
 };
 
 export const STATUS_COLORS: Record<AnimeStatus, string> = {
-  watching: '#7C9CFF',
-  completed: '#3DDC97',
-  plan_to_watch: '#C9C9D6',
-  on_hold: '#FFB547',
-  dropped: '#FF7A7A',
+  watching: '#F07B3F',
+  completed: '#2D4059',
+  plan_to_watch: '#9AA4B4',
+  on_hold: '#D9A21B',
+  dropped: '#EA5455',
 };
 
 /** "en 3 días", "mañana", "en 5 h" */

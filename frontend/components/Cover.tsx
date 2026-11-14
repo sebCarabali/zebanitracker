@@ -1,4 +1,5 @@
-const TONES = ['#3B5B7A', '#7A3B5E', '#3B6B55', '#3D3B7A', '#6B3B3B', '#7A5A2E', '#2E6A7A', '#5A3B7A'];
+// Tonos derivados de la paleta (#002B5B, #2D4059, #EA5455, #F07B3F) para portadas sin imagen
+const TONES = ['#002B5B', '#2D4059', '#C73E40', '#D9662C', '#1D4473', '#3E5677', '#A8383A', '#B85A28'];
 
 /** Tono estable a partir del título, para portadas sin imagen. */
 export function toneFor(title: string): string {

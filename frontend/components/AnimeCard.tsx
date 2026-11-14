@@ -108,7 +108,7 @@ export function AnimeCard({ anime, onChange }: { anime: Anime; onChange: (a: Ani
       <div style={{ position: 'relative' }}>
         <Link href={`/animes/${anime.id}`} className="card-link" tabIndex={-1} aria-hidden="true">
           <Cover src={anime.cover_url} title={anime.title}>
-            <span className="pill" style={{ color }}><span className="dot" />{STATUS_LABELS[anime.status]}</span>
+            <span className="pill" style={{ '--c': color } as React.CSSProperties}><span className="dot" />{STATUS_LABELS[anime.status]}</span>
             {next && <span className="airing-pill">{next}</span>}
           </Cover>
         </Link>

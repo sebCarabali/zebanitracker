@@ -7,13 +7,13 @@ const $ = (id) => document.getElementById(id);
 const show = (el, visible) => el.classList.toggle('hidden', !visible);
 
 const STATUS = {
-  watching: ['Viendo', '#7C9CFF'],
-  completed: ['Completado', '#3DDC97'],
-  plan_to_watch: ['Pendiente', '#C9C9D6'],
-  on_hold: ['En pausa', '#FFB547'],
-  dropped: ['Abandonado', '#FF7A7A'],
+  watching: ['Viendo', '#F07B3F'],
+  completed: ['Completado', '#2D4059'],
+  plan_to_watch: ['Pendiente', '#9AA4B4'],
+  on_hold: ['En pausa', '#D9A21B'],
+  dropped: ['Abandonado', '#EA5455'],
 };
-const TONES = ['#3B5B7A', '#7A3B5E', '#3B6B55', '#3D3B7A', '#6B3B3B', '#7A5A2E', '#2E6A7A', '#5A3B7A'];
+const TONES = ['#002B5B', '#2D4059', '#C73E40', '#D9662C', '#1D4473', '#3E5677', '#A8383A', '#B85A28'];
 
 let animes = [];
 let tab = null;

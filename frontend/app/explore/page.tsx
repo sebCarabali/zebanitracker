@@ -205,6 +205,7 @@ export default function ExplorePage() {
               return (
                 <article key={a.anilist_id} className="result">
                   <Cover src={a.cover_url} title={a.title}>
+                    <Link href={`/explore/${a.anilist_id}`} className="cover-link" aria-label={`Ver ficha de ${a.title}`} />
                     {a.format && <span className="format">{FORMAT_LABELS[a.format] ?? a.format}</span>}
                     {a.airing_status === 'RELEASING' && <span className="live">EN EMISIÓN</span>}
                     {a.score && <span className="score">{a.score}%</span>}
@@ -214,13 +215,13 @@ export default function ExplorePage() {
                       ) : (
                         <>
                           <button className="btn primary" disabled={adding === a.anilist_id} onClick={() => add(a, 'watching')}>Empezar a ver</button>
-                          <button className="btn glass" disabled={adding === a.anilist_id} onClick={() => add(a, 'plan_to_watch')}>+ Pendiente</button>
+                          <button className="btn light" disabled={adding === a.anilist_id} onClick={() => add(a, 'plan_to_watch')}>+ Pendiente</button>
                         </>
                       )}
                     </div>
                   </Cover>
                   <div className="result-info">
-                    <h3>{a.title}</h3>
+                    <h3><Link href={`/explore/${a.anilist_id}`}>{a.title}</Link></h3>
                     <span className="muted small">
                       {[
                         a.season && a.year ? `${SEASON_LABELS[a.season]} ${a.year}` : a.year,
@@ -233,7 +234,6 @@ export default function ExplorePage() {
                         <button key={g} className="genre" onClick={() => !filters.genres?.includes(g) && toggleIn('genres', g)}>{g}</button>
                       ))}
                     </div>
-                    <a href={a.site_url} target="_blank" rel="noreferrer" className="small">Ver en AniList ↗</a>
                   </div>
                 </article>
               );

@@ -43,6 +43,21 @@ export interface BrowseResult {
   total: number;
 }
 
+export interface AnimeDetails extends CatalogAnime {
+  description: string | null;
+  banner_url: string | null;
+  cover_large_url: string | null;
+  duration: number | null;
+  studios: string[];
+  source: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  popularity: number | null;
+  tags: string[];
+  trailer_url: string | null;
+  relations: { anilist_id: number; title: string; relation: string; format: string | null; cover_url: string | null }[];
+}
+
 export interface FilterOptions {
   genres: string[];
   tags: { name: string; category: string }[];
@@ -120,6 +135,30 @@ query ($ids: [Int]) {
   }
 }`;
 
+const DETAILS_QUERY = `
+query ($id: Int) {
+  Media(id: $id, type: ANIME) {
+    ${MEDIA_FIELDS}
+    description(asHtml: false)
+    bannerImage
+    coverImage { extraLarge large }
+    duration
+    source
+    popularity
+    startDate { year month day }
+    endDate { year month day }
+    studios(isMain: true) { nodes { name } }
+    tags { name rank isMediaSpoiler isAdult }
+    trailer { id site }
+    relations {
+      edges {
+        relationType(version: 2)
+        node { id type format title { romaji english } coverImage { large } }
+      }
+    }
+  }
+}`;
+
 const FILTERS_QUERY = `
 query {
   GenreCollection
@@ -146,6 +185,7 @@ query ($userName: String, $page: Int) {
 export class AniListService {
   private readonly cache = new Map<string, { at: number; data: CatalogAnime[] }>();
   private readonly browseCache = new Map<string, { at: number; data: BrowseResult }>();
+  private readonly detailsCache = new Map<number, { at: number; data: AnimeDetails }>();
   private filtersCache: { at: number; data: FilterOptions } | null = null;
   private static readonly TTL_MS = 10 * 60 * 1000;
   private static readonly MAX_CACHE = 300;
@@ -255,6 +295,61 @@ export class AniListService {
     return out;
   }
 
+  /** Ficha completa de un anime (caché de 1 h). */
+  async details(id: number): Promise<AnimeDetails> {
+    const hit = this.detailsCache.get(id);
+    if (hit && Date.now() - hit.at < 60 * 60 * 1000) return hit.data;
+
+    type Raw = RawMedia & {
+      description: string | null;
+      bannerImage: string | null;
+      coverImage: { extraLarge: string | null; large: string | null } | null;
+      duration: number | null;
+      source: string | null;
+      popularity: number | null;
+      startDate: { year: number | null; month: number | null; day: number | null } | null;
+      endDate: { year: number | null; month: number | null; day: number | null } | null;
+      studios: { nodes: { name: string }[] } | null;
+      tags: { name: string; rank: number; isMediaSpoiler: boolean; isAdult: boolean }[] | null;
+      trailer: { id: string; site: string } | null;
+      relations: { edges: { relationType: string; node: { id: number; type: string; format: string | null; title: { romaji: string | null; english: string | null }; coverImage: { large: string | null } | null } }[] } | null;
+    };
+    const data = await this.query<{ Media: Raw | null }>(DETAILS_QUERY, { id });
+    const m = data.Media;
+    if (!m) throw new NotFoundException('Anime no encontrado en AniList');
+
+    const date = (d: Raw['startDate']) =>
+      d?.year ? [d.year, String(d.month ?? 1).padStart(2, '0'), String(d.day ?? 1).padStart(2, '0')].join('-') : null;
+
+    const result: AnimeDetails = {
+      ...AniListService.normalize(m),
+      description: cleanDescription(m.description),
+      banner_url: m.bannerImage,
+      cover_large_url: m.coverImage?.extraLarge ?? m.coverImage?.large ?? null,
+      duration: m.duration,
+      studios: m.studios?.nodes.map((n) => n.name) ?? [],
+      source: m.source,
+      start_date: date(m.startDate),
+      end_date: date(m.endDate),
+      popularity: m.popularity,
+      tags: (m.tags ?? []).filter((t) => !t.isMediaSpoiler && !t.isAdult && t.rank >= 60).slice(0, 8).map((t) => t.name),
+      trailer_url: m.trailer?.site === 'youtube' ? `https://www.youtube.com/watch?v=${m.trailer.id}` : null,
+      relations: (m.relations?.edges ?? [])
+        .filter((e) => e.node.type === 'ANIME')
+        .slice(0, 8)
+        .map((e) => ({
+          anilist_id: e.node.id,
+          title: e.node.title.english || e.node.title.romaji || `AniList #${e.node.id}`,
+          relation: e.relationType,
+          format: e.node.format,
+          cover_url: e.node.coverImage?.large ?? null,
+        })),
+    };
+    if (this.detailsCache.size >= AniListService.MAX_CACHE) this.detailsCache.delete(this.detailsCache.keys().next().value!);
+    this.detailsCache.set(id, { at: Date.now(), data: result });
+    return result;
+  }
+
   /** Géneros y etiquetas disponibles (cambian muy poco: caché de 24 h). */
   async filterOptions(): Promise<FilterOptions> {
     if (this.filtersCache && Date.now() - this.filtersCache.at < 24 * 60 * 60 * 1000) return this.filtersCache.data;
@@ -305,4 +400,16 @@ export class AniListService {
     }
     return ids;
   }
+}
+
+/** La sinopsis de AniList trae algo de HTML (<br>, <i>) y entidades: se deja en texto plano. */
+function cleanDescription(html: string | null): string | null {
+  if (!html) return null;
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&quot;/g, '"').replace(/&#039;|&apos;/g, "'").replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&mdash;/g, '—').replace(/&nbsp;/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }

@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { AIRING_LABELS, api, Anime, AnimeStatus, relativeTime, STATUS_COLORS, STATUS_LABELS } from '@/lib/api';
+import { AIRING_LABELS, api, Anime, AnimeDetails, AnimeStatus, FORMAT_LABELS, relativeTime, SEASON_LABELS, SOURCE_LABELS, STATUS_COLORS, STATUS_LABELS } from '@/lib/api';
 import { useAuth } from '@/components/AuthProvider';
-import { Cover, toneFor } from '@/components/Cover';
+import { Cover } from '@/components/Cover';
 import { BackIcon, PlayIcon, RefreshIcon, StarIcon } from '@/components/Icons';
 
 const RING_R = 56;
@@ -20,6 +20,14 @@ export default function AnimeDetailPage() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState({ title: '', total: '', source: '', notes: '' });
+  const [details, setDetails] = useState<AnimeDetails | null>(null);
+  const [showFull, setShowFull] = useState(false);
+
+  // Ficha de AniList (sinopsis, estudio…) para los animes vinculados
+  useEffect(() => {
+    if (!anime?.anilist_id) { setDetails(null); return; }
+    api.catalogDetails(anime.anilist_id).then(setDetails).catch(() => setDetails(null));
+  }, [anime?.anilist_id]);
 
   useEffect(() => {
     if (!session) return;
@@ -97,7 +105,7 @@ export default function AnimeDetailPage() {
 
   return (
     <main>
-      <section className="hero" style={{ background: toneFor(anime.title) }}>
+      <section className="hero">
         {anime.cover_url && <div className="hero-bg" style={{ backgroundImage: `url(${anime.cover_url})` }} />}
         <div className="hero-inner">
           <Link href="/" className="back"><BackIcon /> Volver a mi lista</Link>
@@ -106,7 +114,7 @@ export default function AnimeDetailPage() {
             <div className="hero-text">
               <div className="tags">{tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
               <h1>{anime.title}</h1>
-              <p className="muted" style={{ margin: 0, color: 'var(--text-2)' }}>
+              <p className="hero-sub">
                 {anime.anilist_id ? 'Vinculado a AniList' : 'Agregado a mano'}
                 {anime.last_watched_at && ` · Último capítulo marcado ${relativeTime(anime.last_watched_at)}`}
               </p>
@@ -119,7 +127,7 @@ export default function AnimeDetailPage() {
                   style={{ color: anime.is_favorite ? 'var(--fav)' : undefined }}
                   onClick={() => run(() => api.toggleFavorite(anime.id), { is_favorite: !anime.is_favorite })}>
                   <StarIcon filled={anime.is_favorite} size={18} />
-                  <span style={{ color: 'var(--text)' }}>{anime.is_favorite ? 'Favorito' : 'Agregar a favoritos'}</span>
+                  <span style={{ color: 'var(--cream)' }}>{anime.is_favorite ? 'Favorito' : 'Agregar a favoritos'}</span>
                 </button>
                 {anime.source_url && (
                   <a href={anime.source_url} target="_blank" rel="noreferrer" className="btn lg glass">Ver ↗</a>
@@ -136,8 +144,8 @@ export default function AnimeDetailPage() {
             <div className="ring-box">
               <div className="ring">
                 <svg width="132" height="132" viewBox="0 0 132 132" role="img" aria-label={pct !== null ? `Progreso ${pct}%` : 'Progreso'}>
-                  <circle cx="66" cy="66" r={RING_R} fill="none" stroke="#262636" strokeWidth="12" />
-                  <circle cx="66" cy="66" r={RING_R} fill="none" stroke="var(--accent)" strokeWidth="12" strokeLinecap="round"
+                  <circle cx="66" cy="66" r={RING_R} fill="none" stroke="rgba(249, 245, 235, .18)" strokeWidth="12" />
+                  <circle cx="66" cy="66" r={RING_R} fill="none" stroke="var(--red)" strokeWidth="12" strokeLinecap="round"
                     strokeDasharray={dash} transform="rotate(-90 66 66)" />
                 </svg>
                 <div className="ring-label">
@@ -151,7 +159,8 @@ export default function AnimeDetailPage() {
       </section>
 
       <div className="detail">
-        <section className="detail-main panel">
+        <div className="detail-main">
+        <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div className="section-head" style={{ marginBottom: 0 }}>
             <div>
               <h2 style={{ fontSize: '1.35rem' }}>Capítulos</h2>
@@ -175,8 +184,8 @@ export default function AnimeDetailPage() {
             })}
           </div>
           <div className="legend">
-            <span><i style={{ background: 'var(--accent)' }} />Visto</span>
-            <span><i style={{ border: '2px solid var(--accent)' }} />Siguiente</span>
+            <span><i style={{ background: 'var(--accent-strong)' }} />Visto</span>
+            <span><i style={{ border: '2px solid var(--accent-strong)' }} />Siguiente</span>
             <span><i style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)' }} />Pendiente</span>
             {anime.airing_status === 'RELEASING' && <span><i style={{ border: '1px dashed var(--border-2)', opacity: .6 }} />Aún no emitido</span>}
           </div>
@@ -185,6 +194,31 @@ export default function AnimeDetailPage() {
           </p>}
           {error && <p className="error small">{error}</p>}
         </section>
+
+        {details?.description && (
+          <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="section-head" style={{ marginBottom: 0 }}>
+              <h2 style={{ fontSize: '1.35rem' }}>Sinopsis</h2>
+              <Link href={`/explore/${details.anilist_id}`} className="small">Ver ficha completa →</Link>
+            </div>
+            <p className="synopsis">
+              {showFull || details.description.length <= 420 ? details.description : `${details.description.slice(0, 420).trim()}…`}
+            </p>
+            {details.description.length > 420 && (
+              <button className="link" onClick={() => setShowFull((v) => !v)}>{showFull ? 'Ver menos' : 'Leer más'}</button>
+            )}
+            <dl className="info-list" style={{ marginTop: 4 }}>
+              {([
+                ['Formato', details.format ? FORMAT_LABELS[details.format] ?? details.format : null],
+                ['Temporada', details.season && details.year ? `${SEASON_LABELS[details.season]} ${details.year}` : null],
+                ['Duración', details.duration ? `${details.duration} min por capítulo` : null],
+                ['Estudio', details.studios.join(', ') || null],
+                ['Origen', details.source ? SOURCE_LABELS[details.source] ?? details.source : null],
+              ] as [string, string | null][]).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+            </dl>
+          </section>
+        )}
+        </div>
 
         <aside className="detail-side">
           <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

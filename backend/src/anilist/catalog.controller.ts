@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
 import { SupabaseAuthGuard } from '../auth/auth.guard.js';
 import { AniListService } from './anilist.service.js';
 import { BrowseQuery, MediaSort } from './browse.dto.js';
@@ -22,6 +22,12 @@ export class CatalogController {
   browse(@Query() q: BrowseQuery) {
     if (q.sort === MediaSort.SearchMatch && !q.search) q.sort = undefined; // SEARCH_MATCH requiere texto
     return this.anilist.browse(q);
+  }
+
+  /** Ficha completa: sinopsis, estudio, duración, fechas, relaciones… */
+  @Get('anime/:id')
+  details(@Param('id', ParseIntPipe) id: number) {
+    return this.anilist.details(id);
   }
 
   /** Géneros y etiquetas disponibles para los filtros. */
