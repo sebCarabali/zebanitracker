@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
-import { SupabaseService } from '../supabase/supabase.service';
+import { SupabaseService } from '../supabase/supabase.service.js';
 
 export interface AuthedRequest extends Request {
   user: { id: string; email?: string };

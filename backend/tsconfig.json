@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "target": "ES2022",
     "declaration": false,
     "emitDecoratorMetadata": true,

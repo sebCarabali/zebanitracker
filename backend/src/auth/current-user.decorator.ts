@@ -1,5 +1,5 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-import type { AuthedRequest } from './auth.guard';
+import type { AuthedRequest } from './auth.guard.js';
 
 /** Inyecta el access token del usuario autenticado. */
 export const AccessToken = createParamDecorator(

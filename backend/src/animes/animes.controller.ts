@@ -1,10 +1,10 @@
 import {
   Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards,
 } from '@nestjs/common';
-import { SupabaseAuthGuard } from '../auth/auth.guard';
-import { AccessToken } from '../auth/current-user.decorator';
-import { AnimesService } from './animes.service';
-import { CreateAnimeDto, ListAnimesQuery, SetProgressDto, UpdateAnimeDto } from './dto/anime.dto';
+import { SupabaseAuthGuard } from '../auth/auth.guard.js';
+import { AccessToken } from '../auth/current-user.decorator.js';
+import { AnimesService } from './animes.service.js';
+import { CreateAnimeDto, ListAnimesQuery, SetProgressDto, UpdateAnimeDto } from './dto/anime.dto.js';
 
 @Controller('animes')
 @UseGuards(SupabaseAuthGuard)

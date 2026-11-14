@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PostgrestError } from '@supabase/supabase-js';
-import { SupabaseService } from '../supabase/supabase.service';
-import { AnimeStatus, CreateAnimeDto, ListAnimesQuery, UpdateAnimeDto } from './dto/anime.dto';
+import { SupabaseService } from '../supabase/supabase.service.js';
+import { AnimeStatus, CreateAnimeDto, ListAnimesQuery, UpdateAnimeDto } from './dto/anime.dto.js';
 
 export interface Anime {
   id: string;
