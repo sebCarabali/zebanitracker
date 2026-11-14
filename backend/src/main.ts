@@ -14,10 +14,14 @@ async function bootstrap() {
   app.enableCors({
     origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
       // Sin origin (curl, server-to-server), web permitida o extensión de Chrome
-      if (!origin || allowed.includes(origin) || origin.startsWith('chrome-extension://')) {
+      const matches = (rule: string) =>
+        rule.includes('*')
+          ? new RegExp(`^${rule.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[a-z0-9-]+')}$`).test(origin!)
+          : rule === origin;
+      if (!origin || allowed.some(matches) || origin.startsWith('chrome-extension://')) {
         return cb(null, true);
       }
-      cb(new Error(`Origen no permitido: ${origin}`), false);
+      cb(null, false); // sin cabeceras CORS: el navegador bloquea la petición
     },
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

@@ -5,7 +5,7 @@ import { AnimesModule } from './animes/animes.module';
 import { HealthController } from './health.controller';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), SupabaseModule, AnimesModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }), SupabaseModule, AnimesModule],
   controllers: [HealthController],
 })
 export class AppModule {}

@@ -19,23 +19,42 @@ zebanitracker/
 - Reglas automáticas: llegar al último capítulo → *Completado*; marcar *Completado* rellena el progreso; no se puede superar el total.
 - Extensión: detecta el anime y el capítulo desde el título de la pestaña (p. ej. `Frieren Episodio 12 - AnimeFLV`). Si ya está en tu lista lo marca visto con un clic; si no, lo agrega con el enlace de la página.
 
-## 1. Supabase
+## Configuración: variables de entorno en Vercel
 
-1. Crea un proyecto en [supabase.com](https://supabase.com).
-2. En **SQL Editor** ejecuta `supabase/migrations/001_init.sql` (o `supabase db push` con la CLI).
-3. En **Authentication → URL Configuration** agrega `http://localhost:3000` a *Redirect URLs* (necesario para el enlace mágico y la confirmación de correo).
-4. Copia la *Project URL* y la *anon/publishable key* de **Project Settings → API**.
+No se usan archivos `.env`. Toda la configuración vive en las **Environment Variables** de cada proyecto de Vercel (equipo *sebastin-carabalis-projects*), y el backend arranca con `ignoreEnvFile: true`.
 
-La seguridad vive en Postgres: la API usa la anon key + el JWT del usuario, así que las políticas RLS garantizan que cada usuario solo vea y edite sus animes.
+| Proyecto Vercel | Root | Variable | Production / Preview | Development |
+|---|---|---|---|---|
+| `zebanitracker-api` | `backend/` | `SUPABASE_URL` | `https://ccztpoqpgplnknhsrbbp.supabase.co` | igual |
+| | | `SUPABASE_ANON_KEY` | publishable key de Supabase | igual |
+| | | `CORS_ORIGINS` | `https://zebanitracker-web.vercel.app,https://zebanitracker-web-*.vercel.app` | `http://localhost:3000` |
+| `zebanitracker-web` | `frontend/` | `NEXT_PUBLIC_SUPABASE_URL` | igual que arriba | igual |
+| | | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | publishable key | igual |
+| | | `NEXT_PUBLIC_API_URL` | `https://zebanitracker-api.vercel.app/api` | `http://localhost:4000/api` |
 
-## 2. Backend (NestJS)
+`CORS_ORIGINS` admite comodines (`*`) para cubrir los despliegues de vista previa. Los orígenes `chrome-extension://` se permiten siempre.
+
+Cada push a `main` despliega ambos proyectos automáticamente.
+
+### Desarrollo local (sin archivos .env)
+
+Con la [CLI de Vercel](https://vercel.com/docs/cli) se usan las variables del entorno *Development* directamente:
 
 ```bash
-cd backend
-cp .env.example .env   # completa SUPABASE_URL y SUPABASE_ANON_KEY
-npm install
-npm run start:dev      # http://localhost:4000/api
+npm i -g vercel
+cd backend  && vercel link --project zebanitracker-api && npm install && vercel dev --listen 4000
+cd frontend && vercel link --project zebanitracker-web && npm install && vercel dev --listen 3000
 ```
+
+## Supabase
+
+Proyecto `ccztpoqpgplnknhsrbbp`. La migración `supabase/migrations/001_init.sql` ya está aplicada. La seguridad vive en Postgres: la API usa la publishable key + el JWT del usuario, así que las políticas RLS garantizan que cada usuario solo vea y edite sus animes.
+
+En **Authentication → URL Configuration** deben estar como Site URL / Redirect URLs `https://zebanitracker-web.vercel.app` (y `http://localhost:3000` para desarrollo), necesarios para el enlace mágico y la confirmación de correo.
+
+## Backend (NestJS)
+
+Se despliega en Vercel con el preset **NestJS** (entrada `src/main.ts`).
 
 > Nota: Nest CLI todavía no soporta TypeScript 7, por eso el proyecto fija `typescript@^6`.
 
@@ -56,28 +75,17 @@ npm run start:dev      # http://localhost:4000/api
 
 Estados: `watching`, `completed`, `plan_to_watch`, `on_hold`, `dropped`.
 
-## 3. Frontend (Next.js)
+## Frontend (Next.js)
 
-```bash
-cd frontend
-cp .env.example .env.local   # Supabase URL, anon key y NEXT_PUBLIC_API_URL
-npm install
-npm run dev                  # http://localhost:3000
-```
+Se despliega en Vercel con el preset Next.js. Las variables `NEXT_PUBLIC_*` se incrustan en el build, así que tras cambiarlas hay que redesplegar.
 
-## 4. Extensión de Chrome
+## Extensión de Chrome
 
-1. Edita `extension/config.js` con tu `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `API_URL` y `WEB_URL`.
-2. Si la API no está en `localhost:4000`, agrega su dominio en `host_permissions` del `manifest.json`.
+1. `extension/config.js` ya apunta a producción (`zebanitracker-api.vercel.app`). Una extensión no tiene variables de entorno, por eso esos valores públicos van en ese archivo; para desarrollo cámbialos a `localhost`.
+2. Si usas otro dominio para la API, agrégalo en `host_permissions` del `manifest.json`.
 3. Abre `chrome://extensions`, activa **Modo desarrollador** → **Cargar descomprimida** → selecciona la carpeta `extension/`.
 4. Inicia sesión en el popup con tu correo y contraseña (las cuentas se crean desde la web).
 
 Pestañas del popup:
 - **Esta página**: detecta título y capítulo de la pestaña activa. Si coincide con un anime de tu lista, puedes marcar el capítulo visto; si no, lo agregas.
 - **Mis animes**: lista con búsqueda, favorito, `+1` y campo para fijar un capítulo.
-
-## Despliegue
-
-- **Frontend** → Vercel (configura las tres variables `NEXT_PUBLIC_*`).
-- **Backend** → Railway, Render, Fly.io, etc. Define `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `PORT` y `CORS_ORIGINS` con el dominio del frontend (los orígenes `chrome-extension://` se permiten siempre).
-- Actualiza `extension/config.js` y `host_permissions` con las URLs de producción.
