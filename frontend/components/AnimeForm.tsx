@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Anime, AnimeInput, AnimeStatus, STATUS_LABELS } from '@/lib/api';
+import { Anime, AnimeInput, AnimeStatus, CatalogAnime, STATUS_LABELS } from '@/lib/api';
+import { CatalogSearch } from './CatalogSearch';
 
 export function AnimeForm({ initial, submitLabel, onSubmit }: {
   initial?: Partial<Anime>;
@@ -16,6 +17,7 @@ export function AnimeForm({ initial, submitLabel, onSubmit }: {
   const [cover, setCover] = useState(initial?.cover_url ?? '');
   const [source, setSource] = useState(initial?.source_url ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
+  const [anilistId, setAnilistId] = useState<number | null>(initial?.anilist_id ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,6 +35,7 @@ export function AnimeForm({ initial, submitLabel, onSubmit }: {
         cover_url: cover.trim() || null,
         source_url: source.trim() || null,
         notes: notes.trim() || null,
+        anilist_id: anilistId,
       });
     } catch (err) {
       setError((err as Error).message);
@@ -40,8 +43,24 @@ export function AnimeForm({ initial, submitLabel, onSubmit }: {
     }
   }
 
+  function pick(a: CatalogAnime) {
+    setTitle(a.title);
+    setTotal(a.total_episodes?.toString() ?? '');
+    setCover(a.cover_url ?? '');
+    if (!source) setSource(a.site_url);
+    setAnilistId(a.anilist_id);
+  }
+
   return (
     <form className="form" onSubmit={handle}>
+      <CatalogSearch onSelect={pick} />
+      {anilistId && (
+        <p className="linked small">
+          {cover && <img src={cover} alt="" />}
+          <span>Vinculado a AniList #{anilistId}</span>
+          <button type="button" className="link" onClick={() => setAnilistId(null)}>Desvincular</button>
+        </p>
+      )}
       <label>Título*
         <input required maxLength={300} value={title} onChange={(e) => setTitle(e.target.value)} />
       </label>

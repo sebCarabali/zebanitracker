@@ -5,3 +5,8 @@ import type { AuthedRequest } from './auth.guard.js';
 export const AccessToken = createParamDecorator(
   (_: unknown, ctx: ExecutionContext) => ctx.switchToHttp().getRequest<AuthedRequest>().accessToken,
 );
+
+/** Inyecta el id (uuid) del usuario autenticado. */
+export const UserId = createParamDecorator(
+  (_: unknown, ctx: ExecutionContext) => ctx.switchToHttp().getRequest<AuthedRequest>().user.id,
+);

@@ -62,7 +62,10 @@ export default function HomePage() {
       ) : animes.length === 0 ? (
         <div className="empty">
           <p>{favorite || status || search ? 'Nada coincide con el filtro.' : 'Aún no tienes animes.'}</p>
-          <Link href="/animes/new" className="btn primary">Agregar el primero</Link>
+          <div className="row" style={{ justifyContent: 'center' }}>
+            <Link href="/import" className="btn">Importar mi lista de AniList</Link>
+            <Link href="/animes/new" className="btn primary">Agregar el primero</Link>
+          </div>
         </div>
       ) : (
         <section className="grid">

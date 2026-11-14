@@ -10,6 +10,8 @@ let animes = [];
 let tab = null;
 let detected = { title: '', episode: null };
 let matched = null;
+let linked = null; // anime elegido del catálogo de AniList
+let searchTimer = null;
 
 function msg(text, type = 'ok') {
   $('msg').textContent = text;
@@ -81,10 +83,62 @@ function renderPageTab() {
     $('match-episode').value = detected.episode ?? matched.watched_episodes + 1;
     if (matched.total_episodes != null) $('match-episode').max = matched.total_episodes;
   } else {
-    $('add-title').value = detected.title;
-    $('add-watched').value = detected.episode ?? 0;
+    prefillAdd();
   }
 }
+
+function prefillAdd() {
+  $('add-title').value = detected.title;
+  $('add-watched').value = detected.episode ?? 0;
+  setLinked(null);
+  searchCatalog(detected.title);
+}
+
+/* ---------- Catálogo AniList ---------- */
+function setLinked(a) {
+  linked = a;
+  show($('linked'), !!a);
+  if (a) {
+    $('linked-cover').src = a.cover_url ?? '';
+    $('linked-text').textContent = `AniList: ${a.title} · ${a.total_episodes ?? '?'} caps.`;
+  }
+}
+
+async function searchCatalog(term) {
+  const list = $('suggestions');
+  if (!term || term.trim().length < 2) { show(list, false); return; }
+  try {
+    const results = (await api.searchCatalog(term.trim())).slice(0, 5);
+    list.replaceChildren();
+    for (const a of results) {
+      const btn = el('button', { type: 'button' },
+        el('img', { src: a.cover_url ?? '', alt: '' }),
+        el('span', { className: 'info' },
+          el('strong', { textContent: a.title }),
+          el('span', { className: 'small muted', textContent: [a.year, a.total_episodes ? `${a.total_episodes} caps.` : null].filter(Boolean).join(' · ') }),
+        ),
+      );
+      btn.onclick = () => {
+        $('add-title').value = a.title;
+        if (a.total_episodes != null) $('add-total').value = a.total_episodes;
+        setLinked(a);
+        show(list, false);
+      };
+      list.append(el('li', {}, btn));
+    }
+    show(list, results.length > 0 && !linked);
+  } catch (e) {
+    if (e instanceof AuthError) return renderLogin();
+    show(list, false); // el catálogo es opcional: si AniList falla, se agrega a mano
+  }
+}
+
+$('add-title').addEventListener('input', () => {
+  setLinked(null);
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => searchCatalog($('add-title').value), 450);
+});
+$('unlink').addEventListener('click', () => { setLinked(null); searchCatalog($('add-title').value); });
 
 $('match-set').addEventListener('click', async () => {
   const ep = Number($('match-episode').value);
@@ -100,8 +154,7 @@ $('match-set').addEventListener('click', async () => {
 $('match-add-new').addEventListener('click', () => {
   show($('match'), false);
   show($('add-form'), true);
-  $('add-title').value = detected.title;
-  $('add-watched').value = detected.episode ?? 0;
+  prefillAdd();
 });
 
 $('add-form').addEventListener('submit', async (e) => {
@@ -116,6 +169,7 @@ $('add-form').addEventListener('submit', async (e) => {
       status: $('add-status').value,
       is_favorite: $('add-fav').checked,
       ...($('add-url').checked && isHttp ? { source_url: tab.url } : {}),
+      ...(linked ? { anilist_id: linked.anilist_id, cover_url: linked.cover_url } : {}),
     });
     animes = [created, ...animes];
     msg(`✓ "${created.title}" agregado`);

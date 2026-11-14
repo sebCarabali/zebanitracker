@@ -20,9 +20,43 @@ export interface Anime {
   cover_url: string | null;
   source_url: string | null;
   notes: string | null;
+  anilist_id: number | null;
   last_watched_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CatalogAnime {
+  anilist_id: number;
+  title: string;
+  title_romaji: string | null;
+  title_english: string | null;
+  total_episodes: number | null;
+  cover_url: string | null;
+  site_url: string;
+  format: string | null;
+  year: number | null;
+  airing_status: string | null;
+}
+
+export type AniListStatus = 'CURRENT' | 'PLANNING' | 'COMPLETED' | 'DROPPED' | 'PAUSED' | 'REPEATING';
+
+export const ANILIST_STATUS_LABELS: Record<AniListStatus, string> = {
+  CURRENT: 'Viendo',
+  REPEATING: 'Reviendo',
+  COMPLETED: 'Completados',
+  PLANNING: 'Planeados',
+  PAUSED: 'En pausa',
+  DROPPED: 'Abandonados',
+};
+
+export interface ImportResult {
+  username: string;
+  found: number;
+  selected: number;
+  created: number;
+  updated: number;
+  favorites: number;
 }
 
 export type AnimeInput = Partial<Omit<Anime, 'id' | 'created_at' | 'updated_at' | 'last_watched_at'>> & {
@@ -68,4 +102,7 @@ export const api = {
     request<Anime>(`/animes/${id}/progress`, { method: 'PATCH', body: JSON.stringify({ episode }) }),
   next: (id: string) => request<Anime>(`/animes/${id}/progress/next`, { method: 'POST' }),
   prev: (id: string) => request<Anime>(`/animes/${id}/progress/prev`, { method: 'POST' }),
+  searchCatalog: (q: string) => request<CatalogAnime[]>(`/catalog/search?q=${encodeURIComponent(q)}`),
+  importAniList: (body: { username: string; statuses?: AniListStatus[]; include_favorites?: boolean }) =>
+    request<ImportResult>('/animes/import/anilist', { method: 'POST', body: JSON.stringify(body) }),
 };

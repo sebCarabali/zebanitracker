@@ -37,3 +37,11 @@ input, select { width: 100%; padding: .45rem .55rem; border-radius: 7px; border:
 .bar > div { height: 100%; background: var(--accent); }
 .fav { background: none; border: 0; cursor: pointer; font-size: 16px; color: var(--muted); padding: 0; }
 .fav.on { color: #ffd23f; }
+
+.suggestions { list-style: none; margin: 0; padding: .25rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; max-height: 210px; overflow-y: auto; }
+.suggestions button { display: flex; gap: .5rem; width: 100%; padding: .3rem; background: none; border: 0; border-radius: 6px; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.suggestions button:hover { background: var(--surface-2); }
+.suggestions img, .linked img { width: 30px; height: 42px; object-fit: cover; border-radius: 4px; background: var(--surface-2); flex-shrink: 0; }
+.suggestions .info { display: flex; flex-direction: column; min-width: 0; }
+.suggestions strong { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.linked { display: flex; align-items: center; gap: .5rem; background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; padding: .35rem; }

@@ -17,6 +17,9 @@ zebanitracker/
 - Crear, editar y eliminar animes (título, capítulos vistos/total, estado, portada, URL, notas).
 - **Avance** de cada anime: barra de progreso, botón "Visto cap. N", −1, o fijar un capítulo exacto.
 - Reglas automáticas: llegar al último capítulo → *Completado*; marcar *Completado* rellena el progreso; no se puede superar el total.
+- **Integración con AniList** (API GraphQL pública y gratuita, sin API key):
+  - Buscador con autocompletado al crear un anime (web y extensión) que rellena título, portada y total de capítulos.
+  - **Importar / sincronizar** tu lista pública de AniList por nombre de usuario (`/import`): estados, progreso y favoritos. Se puede repetir sin crear duplicados; nunca retrocede tu progreso ni borra notas o enlaces.
 - Extensión: detecta el anime y el capítulo desde el título de la pestaña (p. ej. `Frieren Episodio 12 - AnimeFLV`). Si ya está en tu lista lo marca visto con un clic; si no, lo agrega con el enlace de la página.
 
 ## Configuración: variables de entorno en Vercel
@@ -71,9 +74,14 @@ Se despliega en Vercel con el preset **NestJS** (entrada `src/main.ts`).
 | PATCH | `/api/animes/:id/progress` `{ "episode": 12 }` | Fijar último capítulo visto |
 | POST | `/api/animes/:id/progress/next` | +1 capítulo |
 | POST | `/api/animes/:id/progress/prev` | −1 capítulo |
+| GET | `/api/catalog/search?q=frieren` | Buscar en el catálogo de AniList |
+| POST | `/api/animes/import/anilist` `{ "username": "...", "statuses"?: ["CURRENT","COMPLETED"], "include_favorites"?: true }` | Importar/sincronizar lista de AniList |
 | GET | `/api/health` | Healthcheck (público) |
+| GET | `/api/health/anilist` | Verifica la conexión con AniList (público) |
 
 Estados: `watching`, `completed`, `plan_to_watch`, `on_hold`, `dropped`.
+
+**AniList:** límite de 90 peticiones/min (a veces reducido temporalmente a 30). Las búsquedas se cachean 10 minutos en el backend y la web espera 400 ms antes de buscar. Estados de AniList → app: `CURRENT`/`REPEATING` → Viendo, `PLANNING` → Pendiente, `COMPLETED` → Completado, `PAUSED` → En pausa, `DROPPED` → Abandonado. La lista de AniList del usuario debe ser pública.
 
 ## Frontend (Next.js)
 

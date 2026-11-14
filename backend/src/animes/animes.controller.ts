@@ -2,9 +2,9 @@ import {
   Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards,
 } from '@nestjs/common';
 import { SupabaseAuthGuard } from '../auth/auth.guard.js';
-import { AccessToken } from '../auth/current-user.decorator.js';
+import { AccessToken, UserId } from '../auth/current-user.decorator.js';
 import { AnimesService } from './animes.service.js';
-import { CreateAnimeDto, ListAnimesQuery, SetProgressDto, UpdateAnimeDto } from './dto/anime.dto.js';
+import { CreateAnimeDto, ImportAniListDto, ListAnimesQuery, SetProgressDto, UpdateAnimeDto } from './dto/anime.dto.js';
 
 @Controller('animes')
 @UseGuards(SupabaseAuthGuard)
@@ -14,6 +14,12 @@ export class AnimesController {
   @Get()
   list(@AccessToken() token: string, @Query() query: ListAnimesQuery) {
     return this.animes.list(token, query);
+  }
+
+  /** Importa o sincroniza la lista pública de AniList del usuario indicado. */
+  @Post('import/anilist')
+  importAniList(@AccessToken() token: string, @UserId() userId: string, @Body() dto: ImportAniListDto) {
+    return this.animes.importFromAniList(token, userId, dto);
   }
 
   @Get(':id')

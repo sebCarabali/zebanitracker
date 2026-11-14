@@ -44,7 +44,13 @@
 
       <!-- Agregar nuevo -->
       <form id="add-form" class="form hidden">
-        <label>Título<input id="add-title" required maxlength="300" /></label>
+        <label>Título (busca en AniList al escribir)<input id="add-title" required maxlength="300" autocomplete="off" /></label>
+        <div id="linked" class="linked hidden">
+          <img id="linked-cover" alt="" />
+          <span id="linked-text" class="small grow"></span>
+          <button type="button" id="unlink" class="link small">Quitar</button>
+        </div>
+        <ul id="suggestions" class="suggestions hidden"></ul>
         <div class="row">
           <label class="grow">Último cap. visto<input id="add-watched" type="number" min="0" value="0" /></label>
           <label class="grow">Total<input id="add-total" type="number" min="0" placeholder="?" /></label>

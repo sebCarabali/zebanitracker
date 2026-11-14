@@ -1,7 +1,7 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { Transform } from 'class-transformer';
 import {
-  IsBoolean, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength, Min,
+  ArrayUnique, IsArray, IsBoolean, Matches, Length, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength, Min,
 } from 'class-validator';
 
 export enum AnimeStatus {
@@ -36,6 +36,10 @@ export class CreateAnimeDto {
 
   @IsOptional() @IsString() @MaxLength(5000)
   notes?: string | null;
+
+  /** ID del anime en AniList (si se eligió del catálogo). */
+  @IsOptional() @IsInt() @Min(1)
+  anilist_id?: number | null;
 }
 
 export class UpdateAnimeDto extends PartialType(CreateAnimeDto) {}
@@ -57,4 +61,26 @@ export class ListAnimesQuery {
 
   @IsOptional() @IsString() @MaxLength(100)
   search?: string;
+}
+
+export enum AniListStatus {
+  Current = 'CURRENT',
+  Planning = 'PLANNING',
+  Completed = 'COMPLETED',
+  Dropped = 'DROPPED',
+  Paused = 'PAUSED',
+  Repeating = 'REPEATING',
+}
+
+export class ImportAniListDto {
+  @IsString() @Length(2, 20) @Matches(/^[A-Za-z0-9_-]+$/, { message: 'Nombre de usuario de AniList inválido' })
+  username: string;
+
+  /** Estados a importar; por defecto todos. */
+  @IsOptional() @IsArray() @ArrayUnique() @IsEnum(AniListStatus, { each: true })
+  statuses?: AniListStatus[];
+
+  /** Marcar como favoritos los favoritos de AniList (por defecto sí). */
+  @IsOptional() @IsBoolean()
+  include_favorites?: boolean;
 }

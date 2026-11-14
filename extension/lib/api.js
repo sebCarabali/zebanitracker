@@ -24,4 +24,5 @@ export const api = {
   setProgress: (id, episode) => request(`/animes/${id}/progress`, { method: 'PATCH', body: { episode } }),
   next: (id) => request(`/animes/${id}/progress/next`, { method: 'POST' }),
   toggleFavorite: (id) => request(`/animes/${id}/favorite`, { method: 'POST' }),
+  searchCatalog: (q) => request(`/catalog/search?q=${encodeURIComponent(q)}`),
 };
