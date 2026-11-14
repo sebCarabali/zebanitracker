@@ -1,5 +1,5 @@
 -- Anime Tracker: esquema inicial
-create type anime_status as enum ('watching', 'completed', 'plan_to_watch', 'on_hold', 'dropped');
+create type public.anime_status as enum ('watching', 'completed', 'plan_to_watch', 'on_hold', 'dropped');
 
 create table public.animes (
   id               uuid primary key default gen_random_uuid(),
@@ -7,7 +7,7 @@ create table public.animes (
   title            text not null check (char_length(title) between 1 and 300),
   total_episodes   integer check (total_episodes is null or total_episodes >= 0),
   watched_episodes integer not null default 0 check (watched_episodes >= 0),
-  status           anime_status not null default 'watching',
+  status           public.anime_status not null default 'watching',
   is_favorite      boolean not null default false,
   cover_url        text,
   source_url       text,
@@ -23,7 +23,7 @@ create index animes_user_fav_idx on public.animes (user_id) where is_favorite;
 
 -- updated_at automático
 create or replace function public.set_updated_at() returns trigger
-language plpgsql as $$
+language plpgsql set search_path = '' as $$
 begin
   new.updated_at := now();
   return new;
@@ -35,7 +35,7 @@ for each row execute function public.set_updated_at();
 -- Row Level Security: cada usuario solo ve/modifica sus animes
 alter table public.animes enable row level security;
 
-create policy "animes_select_own" on public.animes for select using (auth.uid() = user_id);
-create policy "animes_insert_own" on public.animes for insert with check (auth.uid() = user_id);
-create policy "animes_update_own" on public.animes for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "animes_delete_own" on public.animes for delete using (auth.uid() = user_id);
+create policy "animes_select_own" on public.animes for select using ((select auth.uid()) = user_id);
+create policy "animes_insert_own" on public.animes for insert with check ((select auth.uid()) = user_id);
+create policy "animes_update_own" on public.animes for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy "animes_delete_own" on public.animes for delete using ((select auth.uid()) = user_id);
