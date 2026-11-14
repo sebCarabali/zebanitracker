@@ -33,3 +33,17 @@ export function findMatch(animes, title) {
     null
   );
 }
+
+/** Intenta adivinar la URL del siguiente capítulo incrementando el último número de la ruta. */
+export function guessNextEpisodeUrl(url, watched) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const re = new RegExp(`(\\D|^)(0*${watched})(?!.*\\d)`);
+    const path = u.pathname + u.search;
+    if (!re.test(path)) return null;
+    return u.origin + path.replace(re, (_m, pre, num) => pre + String(watched + 1).padStart(num.length, '0'));
+  } catch {
+    return null;
+  }
+}

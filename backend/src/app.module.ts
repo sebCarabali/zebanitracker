@@ -4,9 +4,11 @@ import { SupabaseModule } from './supabase/supabase.module.js';
 import { AnimesModule } from './animes/animes.module.js';
 import { HealthController } from './health.controller.js';
 import { AniListModule } from './anilist/anilist.module.js';
+import { ProfileModule } from './profile/profile.module.js';
+import { CronModule } from './cron/cron.module.js';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }), SupabaseModule, AniListModule, AnimesModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }), SupabaseModule, AniListModule, AnimesModule, ProfileModule, CronModule],
   controllers: [HealthController],
 })
 export class AppModule {}

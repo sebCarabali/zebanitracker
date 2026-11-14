@@ -1,7 +1,7 @@
 import { CONFIG } from './config.js';
 import { getSession, signIn, signOut } from './lib/auth.js';
 import { api, AuthError } from './lib/api.js';
-import { detectFromTab, findMatch } from './lib/detect.js';
+import { detectFromTab, findMatch, guessNextEpisodeUrl } from './lib/detect.js';
 
 const $ = (id) => document.getElementById(id);
 const show = (el, visible) => el.classList.toggle('hidden', !visible);
@@ -164,7 +164,8 @@ $('match-set').addEventListener('click', async () => {
   const prev = matched.watched_episodes;
   $('match-set').disabled = true;
   try {
-    replaceAnime(await api.setProgress(matched.id, target));
+    const pageUrl = /^https?:\/\//.test(tab?.url ?? '') ? tab.url : undefined;
+    replaceAnime(await api.setProgress(matched.id, target, pageUrl));
     lastMark = { prev, episode: target };
     renderPage();
     renderList();
@@ -301,6 +302,12 @@ function renderList() {
     fav.setAttribute('aria-pressed', String(a.is_favorite));
     fav.onclick = () => update(api.toggleFavorite(a.id));
 
+    const nextUrl = guessNextEpisodeUrl(a.last_episode_url, a.watched_episodes);
+    const open = nextUrl
+      ? el('a', { className: 'btn', href: nextUrl, target: '_blank', textContent: '▶', title: `Abrir cap. ${a.watched_episodes + 1}` })
+      : null;
+    if (open) open.setAttribute('aria-label', `Abrir capítulo ${a.watched_episodes + 1} de ${a.title}`);
+
     const next = el('button', { className: 'btn', textContent: done ? '✓' : '+1', disabled: done });
     next.setAttribute('aria-label', done ? `${a.title}: al día` : `Marcar capítulo ${a.watched_episodes + 1} de ${a.title}`);
     next.onclick = () => update(api.next(a.id));
@@ -320,6 +327,7 @@ function renderList() {
         bar,
       ),
       fav,
+      ...(open ? [open] : []),
       next,
     ));
   }

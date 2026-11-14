@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AIRING_LABELS, AnimeStatus, api, BrowseFilters, CatalogAnime, FilterOptions, FORMAT_LABELS, SEASON_LABELS, SORT_LABELS,
+  AIRING_LABELS, AnimeStatus, api, BrowseFilters, CatalogAnime, currentSeason, FilterOptions, FORMAT_LABELS, SEASON_LABELS, SORT_LABELS,
 } from '@/lib/api';
 import { useAuth } from '@/components/AuthProvider';
 import { Cover } from '@/components/Cover';
@@ -27,6 +27,17 @@ export default function ExplorePage() {
   const [adding, setAdding] = useState<number | null>(null);
   const [tagInput, setTagInput] = useState('');
   const requestId = useRef(0);
+
+  // /explore?season=FALL&year=2026 (enlace "estrenos de la temporada")
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const season = p.get('season') ?? undefined;
+    const year = p.get('year') ? Number(p.get('year')) : undefined;
+    if (season || year) setFilters((f) => ({ ...f, season, year }));
+  }, []);
+
+  const now = currentSeason();
+  const isThisSeason = filters.season === now.season && filters.year === now.year;
 
   useEffect(() => {
     if (!session) return;
@@ -120,6 +131,10 @@ export default function ExplorePage() {
                 </button>
               ))}
             </div>
+            <button type="button" className="chip" aria-pressed={isThisSeason}
+              onClick={() => setFilters((f) => isThisSeason ? { ...f, season: undefined, year: undefined } : { ...f, season: now.season, year: now.year })}>
+              Esta temporada · {SEASON_LABELS[now.season]} {now.year}
+            </button>
             <label>Año
               <select value={filters.year ?? ''} onChange={(e) => set('year', e.target.value ? Number(e.target.value) : undefined)}>
                 <option value="">Cualquiera</option>

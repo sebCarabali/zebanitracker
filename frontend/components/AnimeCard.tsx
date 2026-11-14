@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Anime, api, knownEpisodes, relativeTime, STATUS_COLORS, STATUS_LABELS } from '@/lib/api';
+import { Anime, api, guessNextEpisodeUrl, knownEpisodes, relativeTime, STATUS_COLORS, STATUS_LABELS } from '@/lib/api';
 import { Cover } from './Cover';
 import { StarIcon } from './Icons';
 
@@ -93,9 +93,23 @@ export function ContinueCard({ anime, onChange }: { anime: Anime; onChange: (a: 
             {done ? (anime.airing_status === 'RELEASING' ? 'Al día' : 'Terminado') : `Visto cap. ${anime.watched_episodes + 1}`}
           </button>
         </div>
+        <NextLinks anime={anime} />
         {error && <span className="error small">{error}</span>}
       </div>
     </article>
+  );
+}
+
+/** "Abrir siguiente" (URL adivinada) o "Volver a donde lo dejaste" si se guardó la página del capítulo. */
+export function NextLinks({ anime }: { anime: Anime }) {
+  if (!anime.last_episode_url) return null;
+  const next = guessNextEpisodeUrl(anime.last_episode_url, anime.watched_episodes);
+  return (
+    <div className="next-links small">
+      {next
+        ? <a href={next} target="_blank" rel="noreferrer">Abrir cap. {anime.watched_episodes + 1} ↗</a>
+        : <a href={anime.last_episode_url} target="_blank" rel="noreferrer">Volver a la página del cap. {anime.watched_episodes} ↗</a>}
+    </div>
   );
 }
 
@@ -110,6 +124,7 @@ export function AnimeCard({ anime, onChange }: { anime: Anime; onChange: (a: Ani
           <Cover src={anime.cover_url} title={anime.title}>
             <span className="pill" style={{ '--c': color } as React.CSSProperties}><span className="dot" />{STATUS_LABELS[anime.status]}</span>
             {next && <span className="airing-pill">{next}</span>}
+          {anime.score && <span className="score-pill" aria-label={`Tu puntuación: ${anime.score} de 10`}>★ {anime.score}</span>}
           </Cover>
         </Link>
         <FavButton anime={anime} onChange={onChange} />

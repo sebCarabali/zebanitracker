@@ -9,8 +9,9 @@ import { PlayIcon, PlusIcon } from './Icons';
 
 const NAV = [
   { href: '/', label: 'Mi lista' },
+  { href: '/calendar', label: 'Calendario' },
   { href: '/explore', label: 'Explorar' },
-  { href: '/import', label: 'Importar' },
+  { href: '/stats', label: 'Estadísticas' },
 ];
 
 export function Brand() {
@@ -42,7 +43,8 @@ export function Header() {
       <Brand />
       <nav className="nav" aria-label="Principal">
         {NAV.map((n) => (
-          <Link key={n.href} href={n.href} className={pathname === n.href ? 'active' : ''} aria-current={pathname === n.href ? 'page' : undefined}>
+          <Link key={n.href} href={n.href} className={(n.href === '/' ? pathname === '/' : pathname.startsWith(n.href)) ? 'active' : ''}
+            aria-current={pathname === n.href ? 'page' : undefined}>
             {n.label}
           </Link>
         ))}
@@ -56,6 +58,8 @@ export function Header() {
           {open && (
             <div className="menu-pop">
               <p className="muted small">{email}</p>
+              <Link href="/settings" className="btn ghost" onClick={() => setOpen(false)}>Ajustes</Link>
+              <Link href="/import" className="btn ghost" onClick={() => setOpen(false)}>Importar y exportar</Link>
               <button className="btn ghost" onClick={() => supabase.auth.signOut()}>Cerrar sesión</button>
             </div>
           )}

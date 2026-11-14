@@ -1,7 +1,7 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { Transform } from 'class-transformer';
 import {
-  ArrayUnique, IsArray, IsBoolean, Matches, Length, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength, Min,
+  ArrayUnique, IsArray, IsBoolean, Matches, Length, Max, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength, Min,
 } from 'class-validator';
 
 export enum AnimeStatus {
@@ -37,6 +37,17 @@ export class CreateAnimeDto {
   @IsOptional() @IsString() @MaxLength(5000)
   notes?: string | null;
 
+  /** Puntuación personal 1-10. */
+  @IsOptional() @IsInt() @Min(1) @Max(10)
+  score?: number | null;
+
+  @IsOptional() @IsString() @MaxLength(5000)
+  review?: string | null;
+
+  /** URL del último capítulo visto (para "abrir siguiente"). */
+  @IsOptional() @IsUrl({ require_tld: false }) @MaxLength(2000)
+  last_episode_url?: string | null;
+
   /** ID del anime en AniList (si se eligió del catálogo). */
   @IsOptional() @IsInt() @Min(1)
   anilist_id?: number | null;
@@ -48,6 +59,10 @@ export class SetProgressDto {
   /** Número del último capítulo visto (0 = ninguno). */
   @IsInt() @Min(0)
   episode: number;
+
+  /** Página donde se vio (la extensión la envía). */
+  @IsOptional() @IsUrl({ require_tld: false }) @MaxLength(2000)
+  url?: string;
 }
 
 export class ListAnimesQuery {
@@ -88,4 +103,10 @@ export class ImportAniListDto {
 export class SyncEpisodesDto {
   @IsOptional() @IsBoolean()
   force?: boolean;
+}
+
+export class ImportMalDto {
+  /** Contenido del XML exportado desde MyAnimeList. */
+  @IsString() @MaxLength(5_000_000)
+  xml: string;
 }

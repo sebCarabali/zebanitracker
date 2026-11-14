@@ -1,4 +1,4 @@
-import { BadGatewayException, HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, HttpException, HttpStatus, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 
 const ENDPOINT = 'https://graphql.anilist.co';
 
@@ -22,7 +22,12 @@ export interface CatalogAnime {
   /** Fecha ISO del próximo capítulo, si está en emisión. */
   next_episode_at: string | null;
   next_episode: number | null;
+  mal_id: number | null;
+  studios: string[];
 }
+
+export interface DiscoverItem { media: CatalogAnime; because: string[]; rating: number }
+export interface SequelItem { media: CatalogAnime; after: string }
 
 export interface BrowseFilters {
   search?: string;
@@ -84,6 +89,8 @@ interface RawMedia {
   genres?: string[];
   averageScore?: number | null;
   nextAiringEpisode?: { episode: number; airingAt: number } | null;
+  idMal?: number | null;
+  studios?: { nodes: { name: string }[] } | null;
 }
 
 const MEDIA_FIELDS = `
@@ -99,6 +106,8 @@ const MEDIA_FIELDS = `
   genres
   averageScore
   nextAiringEpisode { episode airingAt }
+  idMal
+  studios(isMain: true) { nodes { name } }
 `;
 
 const SEARCH_QUERY = `
@@ -147,7 +156,6 @@ query ($id: Int) {
     popularity
     startDate { year month day }
     endDate { year month day }
-    studios(isMain: true) { nodes { name } }
     tags { name rank isMediaSpoiler isAdult }
     trailer { id site }
     relations {
@@ -157,6 +165,34 @@ query ($id: Int) {
       }
     }
   }
+}`;
+
+const DISCOVER_QUERY = `
+query ($ids: [Int]) {
+  Page(perPage: 50) {
+    media(id_in: $ids, type: ANIME) {
+      id
+      title { romaji english }
+      recommendations(sort: RATING_DESC, perPage: 6) {
+        nodes { rating mediaRecommendation { type isAdult ${MEDIA_FIELDS} } }
+      }
+      relations { edges { relationType(version: 2) node { type isAdult ${MEDIA_FIELDS} } } }
+    }
+  }
+}`;
+
+const BY_MAL_QUERY = `
+query ($ids: [Int]) {
+  Page(perPage: 50) {
+    media(idMal_in: $ids, type: ANIME) { ${MEDIA_FIELDS} }
+  }
+}`;
+
+const VIEWER_QUERY = `query { Viewer { id name } }`;
+
+const SAVE_ENTRY_MUTATION = `
+mutation ($mediaId: Int, $progress: Int, $status: MediaListStatus, $scoreRaw: Int) {
+  SaveMediaListEntry(mediaId: $mediaId, progress: $progress, status: $status, scoreRaw: $scoreRaw) { id }
 }`;
 
 const FILTERS_QUERY = `
@@ -186,16 +222,21 @@ export class AniListService {
   private readonly cache = new Map<string, { at: number; data: CatalogAnime[] }>();
   private readonly browseCache = new Map<string, { at: number; data: BrowseResult }>();
   private readonly detailsCache = new Map<number, { at: number; data: AnimeDetails }>();
+  private readonly discoverCache = new Map<string, { at: number; data: any[] }>();
   private filtersCache: { at: number; data: FilterOptions } | null = null;
   private static readonly TTL_MS = 10 * 60 * 1000;
   private static readonly MAX_CACHE = 300;
 
-  private async query<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+  private async query<T>(query: string, variables: Record<string, unknown>, token?: string): Promise<T> {
     let res: Response;
     try {
       res = await fetch(ENDPOINT, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ query, variables }),
         signal: AbortSignal.timeout(10_000),
       });
@@ -207,6 +248,9 @@ export class AniListService {
       throw new HttpException('AniList está limitando las peticiones; intenta en un minuto', HttpStatus.TOO_MANY_REQUESTS);
     }
     const body = (await res.json().catch(() => ({}))) as { data?: T; errors?: { message: string; status?: number }[] };
+    if (res.status === 401 || res.status === 400 && body.errors?.[0]?.message?.includes('Invalid token')) {
+      throw new UnauthorizedException('El token de AniList no es válido o expiró; vuelve a conectar AniList');
+    }
     if (body.errors?.length) {
       const err = body.errors[0];
       if (err.status === 404) throw new NotFoundException('Usuario de AniList no encontrado o con lista privada');
@@ -236,6 +280,8 @@ export class AniListService {
         : m.status === 'FINISHED' ? m.episodes : null,
       next_episode_at: m.nextAiringEpisode ? new Date(m.nextAiringEpisode.airingAt * 1000).toISOString() : null,
       next_episode: m.nextAiringEpisode?.episode ?? null,
+      mal_id: m.idMal ?? null,
+      studios: m.studios?.nodes.map((n) => n.name) ?? [],
     };
   }
 
@@ -309,7 +355,6 @@ export class AniListService {
       popularity: number | null;
       startDate: { year: number | null; month: number | null; day: number | null } | null;
       endDate: { year: number | null; month: number | null; day: number | null } | null;
-      studios: { nodes: { name: string }[] } | null;
       tags: { name: string; rank: number; isMediaSpoiler: boolean; isAdult: boolean }[] | null;
       trailer: { id: string; site: string } | null;
       relations: { edges: { relationType: string; node: { id: number; type: string; format: string | null; title: { romaji: string | null; english: string | null }; coverImage: { large: string | null } | null } }[] } | null;
@@ -327,7 +372,6 @@ export class AniListService {
       banner_url: m.bannerImage,
       cover_large_url: m.coverImage?.extraLarge ?? m.coverImage?.large ?? null,
       duration: m.duration,
-      studios: m.studios?.nodes.map((n) => n.name) ?? [],
       source: m.source,
       start_date: date(m.startDate),
       end_date: date(m.endDate),
@@ -348,6 +392,89 @@ export class AniListService {
     if (this.detailsCache.size >= AniListService.MAX_CACHE) this.detailsCache.delete(this.detailsCache.keys().next().value!);
     this.detailsCache.set(id, { at: Date.now(), data: result });
     return result;
+  }
+
+  /**
+   * Recomendaciones (a partir de `seedIds`) y secuelas (de `completedIds`) en una sola petición.
+   */
+  async discover(seedIds: number[], completedIds: number[]) {
+    const ids = [...new Set([...seedIds, ...completedIds])].slice(0, 50);
+    if (!ids.length) return { recommendations: [] as DiscoverItem[], sequels: [] as SequelItem[] };
+    const key = ids.slice().sort((a, b) => a - b).join(',');
+    const hit = this.discoverCache.get(key);
+    if (hit && Date.now() - hit.at < 60 * 60 * 1000) return this.splitDiscover(hit.data, seedIds, completedIds);
+
+    type Node = RawMedia & { type: string; isAdult: boolean };
+    const data = await this.query<{
+      Page: { media: { id: number; title: { romaji: string | null; english: string | null };
+        recommendations: { nodes: { rating: number; mediaRecommendation: Node | null }[] };
+        relations: { edges: { relationType: string; node: Node }[] } }[] };
+    }>(DISCOVER_QUERY, { ids });
+    if (this.discoverCache.size >= 50) this.discoverCache.delete(this.discoverCache.keys().next().value!);
+    this.discoverCache.set(key, { at: Date.now(), data: data.Page.media });
+    return this.splitDiscover(data.Page.media, seedIds, completedIds);
+  }
+
+  private splitDiscover(
+    media: { id: number; title: { romaji: string | null; english: string | null };
+      recommendations: { nodes: { rating: number; mediaRecommendation: (RawMedia & { type: string; isAdult: boolean }) | null }[] };
+      relations: { edges: { relationType: string; node: RawMedia & { type: string; isAdult: boolean } }[] } }[],
+    seedIds: number[], completedIds: number[],
+  ) {
+    const seeds = new Set(seedIds);
+    const completed = new Set(completedIds);
+    const recs = new Map<number, DiscoverItem>();
+    const sequels = new Map<number, SequelItem>();
+    for (const m of media) {
+      const name = m.title.english || m.title.romaji || `#${m.id}`;
+      if (seeds.has(m.id)) {
+        for (const n of m.recommendations.nodes) {
+          const r = n.mediaRecommendation;
+          if (!r || r.type !== 'ANIME' || r.isAdult || n.rating <= 0) continue;
+          const item = recs.get(r.id) ?? { media: AniListService.normalize(r), because: [], rating: 0 };
+          item.because.push(name);
+          item.rating += n.rating;
+          recs.set(r.id, item);
+        }
+      }
+      if (completed.has(m.id)) {
+        for (const e of m.relations.edges) {
+          if (e.relationType !== 'SEQUEL' || e.node.type !== 'ANIME' || e.node.isAdult) continue;
+          if (!sequels.has(e.node.id)) sequels.set(e.node.id, { media: AniListService.normalize(e.node), after: name });
+        }
+      }
+    }
+    return {
+      recommendations: [...recs.values()].sort((a, b) => b.because.length - a.because.length || b.rating - a.rating),
+      sequels: [...sequels.values()],
+    };
+  }
+
+  /** Convierte IDs de MyAnimeList a animes de AniList (lotes de 50). */
+  async byMalIds(malIds: number[]): Promise<Map<number, CatalogAnime>> {
+    const out = new Map<number, CatalogAnime>();
+    const unique = [...new Set(malIds)];
+    for (let i = 0; i < unique.length; i += 50) {
+      const data = await this.query<{ Page: { media: RawMedia[] } }>(BY_MAL_QUERY, { ids: unique.slice(i, i + 50) });
+      for (const m of data.Page.media) if (m.idMal) out.set(m.idMal, AniListService.normalize(m));
+    }
+    return out;
+  }
+
+  /** Usuario de AniList dueño del token (para conectar la cuenta). */
+  async viewer(token: string): Promise<{ id: number; name: string }> {
+    const data = await this.query<{ Viewer: { id: number; name: string } }>(VIEWER_QUERY, {}, token);
+    return data.Viewer;
+  }
+
+  /** Actualiza la entrada del usuario en su lista de AniList. */
+  async saveListEntry(token: string, entry: { mediaId: number; progress: number; status: string; score?: number | null }) {
+    await this.query(SAVE_ENTRY_MUTATION, {
+      mediaId: entry.mediaId,
+      progress: entry.progress,
+      status: entry.status,
+      ...(entry.score ? { scoreRaw: entry.score * 10 } : {}), // scoreRaw es 0-100 sin importar el formato del usuario
+    }, token);
   }
 
   /** Géneros y etiquetas disponibles (cambian muy poco: caché de 24 h). */

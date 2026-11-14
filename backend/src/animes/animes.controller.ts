@@ -1,10 +1,11 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards,
+  Body, Controller, DefaultValuePipe, Delete, Get, Header, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Query, Res, UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { SupabaseAuthGuard } from '../auth/auth.guard.js';
 import { AccessToken, UserId } from '../auth/current-user.decorator.js';
 import { AnimesService } from './animes.service.js';
-import { CreateAnimeDto, ImportAniListDto, ListAnimesQuery, SetProgressDto, SyncEpisodesDto, UpdateAnimeDto } from './dto/anime.dto.js';
+import { CreateAnimeDto, ImportAniListDto, ImportMalDto, ListAnimesQuery, SetProgressDto, SyncEpisodesDto, UpdateAnimeDto } from './dto/anime.dto.js';
 
 @Controller('animes')
 @UseGuards(SupabaseAuthGuard)
@@ -14,6 +15,36 @@ export class AnimesController {
   @Get()
   list(@AccessToken() token: string, @Query() query: ListAnimesQuery) {
     return this.animes.list(token, query);
+  }
+
+  /** Capítulos marcados en los últimos N días (máx. 400) para historial, racha y mapa de actividad. */
+  @Get('activity')
+  activity(@AccessToken() token: string, @Query('days', new DefaultValuePipe(365), ParseIntPipe) days: number) {
+    return this.animes.activity(token, Math.min(Math.max(days, 1), 400));
+  }
+
+  /** Recomendaciones y secuelas pendientes. */
+  @Get('discover')
+  discover(@AccessToken() token: string) {
+    return this.animes.discover(token);
+  }
+
+  /** Descarga la lista en el formato XML de MyAnimeList. */
+  @Get('export/mal')
+  async exportMal(@AccessToken() token: string, @Res() res: Response) {
+    const { xml, exported, skipped } = await this.animes.exportMal(token);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="zebanitracker-mal.xml"');
+    res.setHeader('X-Exported', String(exported));
+    res.setHeader('X-Skipped', String(skipped));
+    res.setHeader('Access-Control-Expose-Headers', 'X-Exported, X-Skipped, Content-Disposition');
+    res.send(xml);
+  }
+
+  /** Importa el XML exportado desde MyAnimeList. */
+  @Post('import/mal')
+  importMal(@AccessToken() token: string, @UserId() userId: string, @Body() dto: ImportMalDto) {
+    return this.animes.importFromMal(token, userId, dto.xml);
   }
 
   /** Importa o sincroniza la lista pública de AniList del usuario indicado. */
@@ -63,7 +94,7 @@ export class AnimesController {
   /** Fija el último capítulo visto. */
   @Patch(':id/progress')
   setProgress(@AccessToken() token: string, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SetProgressDto) {
-    return this.animes.setProgress(token, id, dto.episode);
+    return this.animes.setProgress(token, id, dto.episode, dto.url);
   }
 
   @Post(':id/progress/next')

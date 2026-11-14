@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PostgrestError } from '@supabase/supabase-js';
 import { SupabaseService } from '../supabase/supabase.service.js';
 import { AniListService, AniListListStatus, CatalogAnime } from '../anilist/anilist.service.js';
@@ -15,18 +15,38 @@ export interface Anime {
   cover_url: string | null;
   source_url: string | null;
   notes: string | null;
+  score: number | null;
+  review: string | null;
   anilist_id: number | null;
+  mal_id: number | null;
+  genres: string[];
+  studios: string[];
+  format: string | null;
+  season_year: number | null;
   airing_status: string | null;
   aired_episodes: number | null;
   next_episode_at: string | null;
   episodes_synced_at: string | null;
+  last_episode_url: string | null;
   last_watched_at: string | null;
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
+/** Entrada a importar, venga de AniList o de MyAnimeList. */
+interface ImportEntry {
+  media: CatalogAnime;
+  status: AnimeStatus;
+  progress: number;
+  score?: number | null;
+  favorite?: boolean;
+}
+
 @Injectable()
 export class AnimesService {
+  private readonly logger = new Logger(AnimesService.name);
+
   constructor(
     private readonly supabase: SupabaseService,
     private readonly anilist: AniListService,
@@ -64,14 +84,14 @@ export class AnimesService {
     const row = this.normalize(dto);
     const { data, error } = await this.table(token).insert(row).select().single();
     if (error) this.fail(error);
-    const created = data as Anime;
+    let created = data as Anime;
     // Completa capítulos y datos de emisión desde AniList; si AniList falla, el anime igual queda creado.
     try {
       await this.syncEpisodes(token, { ids: [created.id], force: true });
-      return await this.findOne(token, created.id);
-    } catch {
-      return created;
-    }
+      created = await this.findOne(token, created.id);
+    } catch { /* opcional */ }
+    await this.pushToAniList(token, created);
+    return created;
   }
 
   async update(token: string, id: string, dto: UpdateAnimeDto): Promise<Anime> {
@@ -79,7 +99,11 @@ export class AnimesService {
     const row = this.normalize(dto, current);
     const { data, error } = await this.table(token).update(row).eq('id', id).select().single();
     if (error) this.fail(error);
-    return data as Anime;
+    const updated = data as Anime;
+    const changed = updated.watched_episodes !== current.watched_episodes
+      || updated.status !== current.status || updated.score !== current.score;
+    if (changed) await this.pushToAniList(token, updated);
+    return updated;
   }
 
   async remove(token: string, id: string): Promise<void> {
@@ -93,8 +117,8 @@ export class AnimesService {
     return this.update(token, id, { is_favorite: !current.is_favorite });
   }
 
-  async setProgress(token: string, id: string, episode: number): Promise<Anime> {
-    return this.update(token, id, { watched_episodes: episode });
+  async setProgress(token: string, id: string, episode: number, url?: string): Promise<Anime> {
+    return this.update(token, id, { watched_episodes: episode, ...(url ? { last_episode_url: url } : {}) });
   }
 
   async increment(token: string, id: string, delta: number): Promise<Anime> {
@@ -103,11 +127,37 @@ export class AnimesService {
     return this.update(token, id, { watched_episodes: next });
   }
 
-  /**
-   * Importa (o sincroniza) la lista pública de AniList de un usuario.
-   * - Empareja por anilist_id y, si no, por título normalizado (animes agregados a mano).
-   * - Nunca retrocede el progreso local ni borra notas, favoritos o el enlace propio.
-   */
+  // ---------------------------------------------------------------------------------------------
+  // AniList: escritura en la lista del usuario (si conectó su cuenta)
+  // ---------------------------------------------------------------------------------------------
+
+  private async anilistToken(token: string): Promise<string | null> {
+    const { data } = await this.supabase.forUser(token).from('profiles').select('anilist_token').maybeSingle();
+    return (data as { anilist_token: string | null } | null)?.anilist_token ?? null;
+  }
+
+  /** Refleja progreso, estado y puntuación en AniList. Nunca hace fallar la operación local. */
+  private async pushToAniList(token: string, a: Anime) {
+    if (!a.anilist_id) return;
+    try {
+      const anilistToken = await this.anilistToken(token);
+      if (!anilistToken) return;
+      await this.anilist.saveListEntry(anilistToken, {
+        mediaId: a.anilist_id,
+        progress: a.watched_episodes,
+        status: TO_ANILIST_STATUS[a.status],
+        score: a.score,
+      });
+    } catch (e) {
+      this.logger.warn(`No se pudo sincronizar con AniList: ${(e as Error).message}`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Importación (AniList y MyAnimeList) y exportación (MyAnimeList)
+  // ---------------------------------------------------------------------------------------------
+
+  /** Importa (o sincroniza) la lista pública de AniList de un usuario. */
   async importFromAniList(token: string, userId: string, dto: ImportAniListDto) {
     const [entries, favourites] = await Promise.all([
       this.anilist.userList(dto.username),
@@ -115,26 +165,58 @@ export class AnimesService {
     ]);
     const wanted = dto.statuses?.length ? new Set<string>(dto.statuses) : null;
     const selected = entries.filter((e) => !wanted || wanted.has(e.status));
+    const result = await this.importEntries(token, userId, selected.map((e) => ({
+      media: e.media,
+      status: STATUS_MAP[e.status],
+      progress: e.progress,
+      favorite: favourites.has(e.media.anilist_id),
+    })));
+    return { username: dto.username, found: entries.length, selected: selected.length, favorites: favourites.size, ...result };
+  }
 
+  /** Importa el XML que exporta MyAnimeList (Perfil › Export). */
+  async importFromMal(token: string, userId: string, xml: string) {
+    const items = parseMalXml(xml);
+    if (!items.length) throw new BadRequestException('No se encontraron animes en el XML de MyAnimeList');
+    const media = await this.anilist.byMalIds(items.map((i) => i.malId));
+    const entries: ImportEntry[] = [];
+    const missing: string[] = [];
+    for (const it of items) {
+      const m = media.get(it.malId);
+      if (!m) { missing.push(it.title); continue; }
+      entries.push({ media: m, status: it.status, progress: it.watched, score: it.score || null });
+    }
+    const result = await this.importEntries(token, userId, entries);
+    return { found: items.length, selected: entries.length, not_found: missing.slice(0, 20), favorites: 0, ...result };
+  }
+
+  /**
+   * Empareja por anilist_id y, si no, por título (animes agregados a mano).
+   * Nunca retrocede el progreso local ni borra notas, reseñas, favoritos o el enlace propio.
+   */
+  private async importEntries(token: string, userId: string, entries: ImportEntry[]) {
     const { data: existingRows, error } = await this.table(token)
-      .select('id, title, anilist_id, watched_episodes, is_favorite');
+      .select('id, title, anilist_id, watched_episodes, is_favorite, score');
     if (error) this.fail(error);
-    const existing = (existingRows ?? []) as Pick<Anime, 'id' | 'title' | 'anilist_id' | 'watched_episodes' | 'is_favorite'>[];
+    const existing = (existingRows ?? []) as Pick<Anime, 'id' | 'title' | 'anilist_id' | 'watched_episodes' | 'is_favorite' | 'score'>[];
     const byAniList = new Map(existing.filter((a) => a.anilist_id).map((a) => [a.anilist_id!, a]));
     const byTitle = new Map(existing.filter((a) => !a.anilist_id).map((a) => [normTitle(a.title), a]));
 
     const inserts: Record<string, unknown>[] = [];
     const updates: { id: string; row: Record<string, unknown> }[] = [];
+    const seen = new Set<number>();
 
-    for (const e of selected) {
+    for (const e of entries) {
       const m = e.media;
+      if (seen.has(m.anilist_id)) continue;
+      seen.add(m.anilist_id);
       const local =
         byAniList.get(m.anilist_id) ??
         byTitle.get(normTitle(m.title)) ??
         (m.title_romaji ? byTitle.get(normTitle(m.title_romaji)) : undefined);
 
       const total = m.total_episodes;
-      let status = STATUS_MAP[e.status];
+      let status = e.status;
       let watched = Math.max(e.progress, local?.watched_episodes ?? 0);
       if (status === AnimeStatus.Completed && total !== null) watched = total;
       if (total !== null) watched = Math.min(watched, total);
@@ -146,13 +228,14 @@ export class AnimesService {
         watched_episodes: watched,
         status,
         cover_url: m.cover_url,
-        is_favorite: (local?.is_favorite ?? false) || favourites.has(m.anilist_id),
-        ...airingFields(m),
+        is_favorite: (local?.is_favorite ?? false) || !!e.favorite,
+        ...(local?.score ? {} : e.score ? { score: Math.min(10, Math.max(1, Math.round(e.score))) } : {}),
+        ...metadataFields(m),
       };
 
       if (local) {
         updates.push({ id: local.id, row: common });
-        byTitle.delete(normTitle(local.title)); // evita emparejar dos entradas con el mismo anime local
+        byTitle.delete(normTitle(local.title));
       } else {
         inserts.push({ ...common, user_id: userId, title: m.title, source_url: m.site_url });
       }
@@ -162,34 +245,83 @@ export class AnimesService {
       const { error: insErr } = await this.table(token).insert(inserts.slice(i, i + 200));
       if (insErr) this.fail(insErr);
     }
-    for (let i = 0; i < updates.length; i += 10) {
-      const results = await Promise.all(
-        updates.slice(i, i + 10).map((u) => this.table(token).update(u.row).eq('id', u.id)),
-      );
-      const failed = results.find((r) => r.error);
-      if (failed?.error) this.fail(failed.error);
-    }
+    await this.applyUpdates(token, updates);
+    return { created: inserts.length, updated: updates.length };
+  }
 
+  /** XML compatible con la importación de MyAnimeList. */
+  async exportMal(token: string): Promise<{ xml: string; exported: number; skipped: number }> {
+    const rows = await this.list(token, {});
+    const withMal = rows.filter((a) => a.mal_id);
+    const esc = (s: string) => s.replace(/]]>/g, ']]]]><![CDATA[>');
+    const entries = withMal.map((a) => `  <anime>
+    <series_animedb_id>${a.mal_id}</series_animedb_id>
+    <series_title><![CDATA[${esc(a.title)}]]></series_title>
+    <series_episodes>${a.total_episodes ?? 0}</series_episodes>
+    <my_watched_episodes>${a.watched_episodes}</my_watched_episodes>
+    <my_score>${a.score ?? 0}</my_score>
+    <my_status>${TO_MAL_STATUS[a.status]}</my_status>
+    <my_comments><![CDATA[${esc(a.review ?? '')}]]></my_comments>
+    <update_on_import>1</update_on_import>
+  </anime>`).join('\n');
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<myanimelist>
+  <myinfo>
+    <user_export_type>1</user_export_type>
+    <user_total_anime>${withMal.length}</user_total_anime>
+  </myinfo>
+${entries}
+</myanimelist>
+`;
+    return { xml, exported: withMal.length, skipped: rows.length - withMal.length };
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Actividad y descubrimiento
+  // ---------------------------------------------------------------------------------------------
+
+  /** Capítulos marcados en los últimos `days` días. */
+  async activity(token: string, days: number) {
+    const since = new Date(Date.now() - days * 86_400_000).toISOString();
+    const { data, error } = await this.supabase.forUser(token).from('watch_events')
+      .select('anime_id, episode, watched_at').gte('watched_at', since).order('watched_at', { ascending: false }).limit(5000);
+    if (error) this.fail(error);
+    return data as { anime_id: string; episode: number; watched_at: string }[];
+  }
+
+  /** Recomendaciones según favoritos/mejor puntuados y secuelas de lo que terminaste. */
+  async discover(token: string) {
+    const rows = await this.list(token, {});
+    const inList = new Set(rows.map((a) => a.anilist_id).filter(Boolean) as number[]);
+    const linked = rows.filter((a) => a.anilist_id);
+    const seeds = [
+      ...linked.filter((a) => a.is_favorite || (a.score ?? 0) >= 8),
+      ...linked.filter((a) => a.status === 'watching' || a.status === 'completed')
+        .sort((a, b) => (b.last_watched_at ?? '').localeCompare(a.last_watched_at ?? '')),
+    ];
+    const seedIds = [...new Set(seeds.map((a) => a.anilist_id!))].slice(0, 6);
+    const completedIds = linked.filter((a) => a.status === 'completed')
+      .sort((a, b) => (b.completed_at ?? b.updated_at).localeCompare(a.completed_at ?? a.updated_at))
+      .map((a) => a.anilist_id!).slice(0, 40);
+    const { recommendations, sequels } = await this.anilist.discover(seedIds, completedIds);
     return {
-      username: dto.username,
-      found: entries.length,
-      selected: selected.length,
-      created: inserts.length,
-      updated: updates.length,
-      favorites: favourites.size,
+      recommendations: recommendations.filter((r) => !inList.has(r.media.anilist_id)).slice(0, 12),
+      sequels: sequels.filter((s) => !inList.has(s.media.anilist_id)),
     };
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Sincronización de capítulos y metadatos desde AniList
+  // ---------------------------------------------------------------------------------------------
+
   /**
-   * Completa el total de capítulos y los datos de emisión desde AniList.
-   * - Animes vinculados: una petición por cada 50.
-   * - Animes sin vincular y sin total: busca por título (máx. 5 por llamada) y solo vincula
-   *   si el título coincide exactamente, para no enlazar el anime equivocado.
-   * - Sin `force`, solo revisa lo desactualizado: en emisión cada 6 h, el resto cada 7 días.
+   * Completa total de capítulos, emisión y metadatos (géneros, estudio, formato, año, MAL) desde AniList.
+   * - Vinculados: una petición por cada 50. Sin vincular y sin total: busca por título exacto (máx. 5).
+   * - Sin `force`: en emisión cada 6 h, el resto cada 7 días; los que no tienen metadatos, siempre.
    */
   async syncEpisodes(token: string, opts: { ids?: string[]; force?: boolean } = {}) {
     let query = this.table(token).select(
-      'id, title, anilist_id, total_episodes, watched_episodes, cover_url, airing_status, episodes_synced_at',
+      'id, title, anilist_id, total_episodes, watched_episodes, cover_url, airing_status, episodes_synced_at, format',
     );
     if (opts.ids?.length) query = query.in('id', opts.ids);
     const { data, error } = await query;
@@ -199,13 +331,13 @@ export class AnimesService {
     const now = Date.now();
     const stale = (a: Anime) => {
       if (opts.force || !a.episodes_synced_at) return true;
+      if (a.anilist_id && !a.format) return true; // aún sin metadatos (géneros, formato…)
       const age = now - new Date(a.episodes_synced_at).getTime();
       return age > (a.airing_status === 'RELEASING' || a.airing_status === 'NOT_YET_RELEASED' ? 6 : 7 * 24) * 3600_000;
     };
     const candidates = rows.filter(stale);
     const usedIds = new Set(rows.map((a) => a.anilist_id).filter(Boolean));
 
-    // Vincular por título los que no tienen anilist_id ni total
     const newLinks = new Map<string, number>();
     const unlinked = candidates.filter((a) => !a.anilist_id && a.total_episodes === null).slice(0, 5);
     for (const a of unlinked) {
@@ -229,19 +361,27 @@ export class AnimesService {
       const anilistId = a.anilist_id ?? newLinks.get(a.id);
       const m = anilistId ? media.get(anilistId) : undefined;
       if (!m) {
-        updates.push({ id: a.id, row: { episodes_synced_at: syncedAt } }); // evita reintentar en cada carga
+        updates.push({ id: a.id, row: { episodes_synced_at: syncedAt } });
         continue;
       }
-      const row: Record<string, unknown> = { ...airingFields(m), episodes_synced_at: syncedAt };
+      const row: Record<string, unknown> = { ...metadataFields(m), episodes_synced_at: syncedAt };
       if (!a.anilist_id) row.anilist_id = anilistId;
       if (!a.cover_url && m.cover_url) row.cover_url = m.cover_url;
-      // Solo se acepta el total de AniList si no deja el progreso por encima del total
       if (m.total_episodes !== null && m.total_episodes >= a.watched_episodes && m.total_episodes !== a.total_episodes) {
         row.total_episodes = m.total_episodes;
       }
       updates.push({ id: a.id, row });
     }
+    await this.applyUpdates(token, updates);
 
+    return {
+      checked: candidates.length,
+      updated: updates.filter((u) => Object.keys(u.row).length > 1).length,
+      linked: newLinks.size,
+    };
+  }
+
+  private async applyUpdates(token: string, updates: { id: string; row: Record<string, unknown> }[]) {
     for (let i = 0; i < updates.length; i += 10) {
       const results = await Promise.all(
         updates.slice(i, i + 10).map((u) => this.table(token).update(u.row).eq('id', u.id)),
@@ -249,12 +389,6 @@ export class AnimesService {
       const failed = results.find((r) => r.error);
       if (failed?.error) this.fail(failed.error);
     }
-
-    return {
-      checked: candidates.length,
-      updated: updates.filter((u) => Object.keys(u.row).length > 1).length,
-      linked: newLinks.size,
-    };
   }
 
   /**
@@ -291,6 +425,9 @@ export class AnimesService {
       cover_url: merged.cover_url || null,
       source_url: merged.source_url || null,
       notes: merged.notes || null,
+      score: merged.score ?? null,
+      review: merged.review || null,
+      last_episode_url: merged.last_episode_url || null,
       anilist_id: merged.anilist_id ?? null,
       ...(progressChanged && watched > 0 ? { last_watched_at: new Date().toISOString() } : {}),
     };
@@ -306,15 +443,65 @@ const STATUS_MAP: Record<AniListListStatus, AnimeStatus> = {
   DROPPED: AnimeStatus.Dropped,
 };
 
+const TO_ANILIST_STATUS: Record<AnimeStatus, string> = {
+  watching: 'CURRENT',
+  completed: 'COMPLETED',
+  plan_to_watch: 'PLANNING',
+  on_hold: 'PAUSED',
+  dropped: 'DROPPED',
+};
+
+const TO_MAL_STATUS: Record<AnimeStatus, string> = {
+  watching: 'Watching',
+  completed: 'Completed',
+  plan_to_watch: 'Plan to Watch',
+  on_hold: 'On-Hold',
+  dropped: 'Dropped',
+};
+
+const FROM_MAL_STATUS: Record<string, AnimeStatus> = {
+  watching: AnimeStatus.Watching, '1': AnimeStatus.Watching,
+  completed: AnimeStatus.Completed, '2': AnimeStatus.Completed,
+  'on-hold': AnimeStatus.OnHold, '3': AnimeStatus.OnHold,
+  dropped: AnimeStatus.Dropped, '4': AnimeStatus.Dropped,
+  'plan to watch': AnimeStatus.PlanToWatch, '6': AnimeStatus.PlanToWatch,
+};
+
 function normTitle(t: string): string {
-  return t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  return t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 }
 
-function airingFields(m: CatalogAnime) {
+function metadataFields(m: CatalogAnime) {
   return {
     airing_status: m.airing_status,
     aired_episodes: m.aired_episodes,
     next_episode_at: m.next_episode_at,
+    genres: m.genres,
+    studios: m.studios,
+    format: m.format,
+    season_year: m.year,
+    mal_id: m.mal_id,
     episodes_synced_at: new Date().toISOString(),
   };
+}
+
+/** Lector mínimo del XML de MyAnimeList (no ejecuta entidades externas: solo expresiones regulares). */
+export function parseMalXml(xml: string) {
+  const field = (block: string, name: string) => {
+    const m = block.match(new RegExp(`<${name}>\\s*(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([^<]*))\\s*</${name}>`));
+    return (m?.[1] ?? m?.[2] ?? '').trim();
+  };
+  const out: { malId: number; title: string; watched: number; score: number; status: AnimeStatus }[] = [];
+  for (const block of xml.match(/<anime>[\s\S]*?<\/anime>/g) ?? []) {
+    const malId = Number(field(block, 'series_animedb_id'));
+    if (!malId) continue;
+    out.push({
+      malId,
+      title: field(block, 'series_title'),
+      watched: Number(field(block, 'my_watched_episodes')) || 0,
+      score: Number(field(block, 'my_score')) || 0,
+      status: FROM_MAL_STATUS[field(block, 'my_status').toLowerCase()] ?? AnimeStatus.PlanToWatch,
+    });
+  }
+  return out;
 }

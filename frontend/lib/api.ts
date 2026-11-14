@@ -21,9 +21,18 @@ export interface Anime {
   source_url: string | null;
   notes: string | null;
   anilist_id: number | null;
+  mal_id: number | null;
+  score: number | null;
+  review: string | null;
+  genres: string[];
+  studios: string[];
+  format: string | null;
+  season_year: number | null;
   airing_status: string | null;
   aired_episodes: number | null;
   next_episode_at: string | null;
+  last_episode_url: string | null;
+  completed_at: string | null;
   last_watched_at: string | null;
   created_at: string;
   updated_at: string;
@@ -128,28 +137,51 @@ export const ANILIST_STATUS_LABELS: Record<AniListStatus, string> = {
 };
 
 export interface ImportResult {
-  username: string;
+  username?: string;
   found: number;
   selected: number;
   created: number;
   updated: number;
   favorites: number;
+  not_found?: string[];
 }
 
-export type AnimeInput = Partial<Omit<Anime, 'id' | 'created_at' | 'updated_at' | 'last_watched_at' | 'airing_status' | 'aired_episodes' | 'next_episode_at'>> & {
+export interface WatchEvent { anime_id: string; episode: number; watched_at: string }
+export interface Discover {
+  recommendations: { media: CatalogAnime; because: string[]; rating: number }[];
+  sequels: { media: CatalogAnime; after: string }[];
+}
+export interface Profile {
+  username: string | null;
+  is_public: boolean;
+  notify_email: boolean;
+  anilist_username: string | null;
+  anilist_connected: boolean;
+  email_notifications_available: boolean;
+}
+export interface PublicList {
+  username: string;
+  animes: Pick<Anime, 'title' | 'cover_url' | 'status' | 'watched_episodes' | 'total_episodes' | 'is_favorite' | 'score' | 'anilist_id' | 'genres' | 'format' | 'season_year'>[];
+}
+
+export type AnimeInput = Partial<Pick<Anime, 'title' | 'total_episodes' | 'watched_episodes' | 'status' | 'is_favorite' | 'cover_url' | 'source_url' | 'notes' | 'score' | 'review' | 'last_episode_url' | 'anilist_id'>> & {
   title?: string;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new Error('No has iniciado sesión');
+async function request<T>(path: string, init: RequestInit = {}, auth = true): Promise<T> {
+  let authHeader: Record<string, string> = {};
+  if (auth) {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error('No has iniciado sesión');
+    authHeader = { Authorization: `Bearer ${token}` };
+  }
 
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...init.headers },
+    headers: { 'Content-Type': 'application/json', ...authHeader, ...init.headers },
   });
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => ({}));
@@ -175,8 +207,23 @@ export const api = {
     request<Anime>(`/animes/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   remove: (id: string) => request<void>(`/animes/${id}`, { method: 'DELETE' }),
   toggleFavorite: (id: string) => request<Anime>(`/animes/${id}/favorite`, { method: 'POST' }),
-  setProgress: (id: string, episode: number) =>
-    request<Anime>(`/animes/${id}/progress`, { method: 'PATCH', body: JSON.stringify({ episode }) }),
+  setProgress: (id: string, episode: number, url?: string) =>
+    request<Anime>(`/animes/${id}/progress`, { method: 'PATCH', body: JSON.stringify({ episode, ...(url ? { url } : {}) }) }),
+  activity: (days = 365) => request<WatchEvent[]>(`/animes/activity?days=${days}`),
+  discover: () => request<Discover>('/animes/discover'),
+  importMal: (xml: string) => request<ImportResult>('/animes/import/mal', { method: 'POST', body: JSON.stringify({ xml }) }),
+  exportMal: async () => {
+    const { data } = await supabase.auth.getSession();
+    const res = await fetch(`${API_URL}/animes/export/mal`, { headers: { Authorization: `Bearer ${data.session?.access_token}` } });
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+    return { blob: await res.blob(), exported: Number(res.headers.get('X-Exported') ?? 0), skipped: Number(res.headers.get('X-Skipped') ?? 0) };
+  },
+  profile: () => request<Profile>('/profile'),
+  updateProfile: (p: Partial<Pick<Profile, 'username' | 'is_public' | 'notify_email'>>) =>
+    request<Profile>('/profile', { method: 'PATCH', body: JSON.stringify(p) }),
+  connectAniList: (token: string) => request<Profile>('/profile/anilist', { method: 'PUT', body: JSON.stringify({ token }) }),
+  disconnectAniList: () => request<Profile>('/profile/anilist', { method: 'DELETE' }),
+  publicList: (username: string) => request<PublicList>(`/public/${encodeURIComponent(username)}`, {}, false),
   next: (id: string) => request<Anime>(`/animes/${id}/progress/next`, { method: 'POST' }),
   prev: (id: string) => request<Anime>(`/animes/${id}/progress/prev`, { method: 'POST' }),
   syncEpisodes: (force = false) =>
@@ -220,3 +267,27 @@ export function relativeTime(iso: string): string {
 export function knownEpisodes(a: Pick<Anime, 'total_episodes' | 'aired_episodes'>): number | null {
   return a.total_episodes ?? a.aired_episodes ?? null;
 }
+
+/** Temporada de anime actual según la fecha. */
+export function currentSeason(d = new Date()): { season: string; year: number } {
+  const m = d.getMonth();
+  const season = m < 3 ? 'WINTER' : m < 6 ? 'SPRING' : m < 9 ? 'SUMMER' : 'FALL';
+  return { season, year: d.getFullYear() };
+}
+
+/** Intenta adivinar la URL del siguiente capítulo incrementando el último número de la ruta. */
+export function guessNextEpisodeUrl(url: string | null, watched: number): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const re = new RegExp(`(\\D|^)(0*${watched})(?!.*\\d)`);
+    const path = u.pathname + u.search;
+    if (!re.test(path)) return null;
+    const next = path.replace(re, (_m, pre: string, num: string) => pre + String(watched + 1).padStart(num.length, '0'));
+    return u.origin + next;
+  } catch {
+    return null;
+  }
+}
+
+export const MINUTES_PER_EPISODE = 24;

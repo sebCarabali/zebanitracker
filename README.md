@@ -17,6 +17,17 @@ zebanitracker/
 - Crear, editar y eliminar animes (título, capítulos vistos/total, estado, portada, URL, notas).
 - **Avance** de cada anime: barra de progreso, botón "Visto cap. N", −1, o fijar un capítulo exacto.
 - Reglas automáticas: llegar al último capítulo → *Completado*; marcar *Completado* rellena el progreso; no se puede superar el total.
+- **Calendario** (`/calendar`): estrenos de los próximos 7 días y capítulos ya emitidos que aún no ves.
+- **Puntuación (1-10) y reseña** por anime; orden de la biblioteca por recientes, título, progreso, puntuación o próximo estreno.
+- **Continuar con un clic**: al marcar desde la extensión se guarda la página del capítulo y se ofrece "Abrir cap. N+1" (adivina la URL).
+- **Historial**: cada capítulo marcado queda registrado (`watch_events`) → racha diaria y mapa de actividad.
+- **Descubrir**: "Para ti" (recomendaciones de AniList según tus favoritos y mejor puntuados) y **secuelas pendientes** de lo que terminaste; acceso rápido a los estrenos de la temporada.
+- **Estadísticas** (`/stats`): horas, rachas, géneros, estudios, años, formatos, puntuación media y tasa de abandono.
+- **Lista pública** (`/u/:usuario`), opcional desde Ajustes; nunca muestra notas, reseñas ni enlaces.
+- **Sincronizar con AniList** (OAuth): cada cambio se refleja en tu lista de AniList.
+- **MyAnimeList**: importar el XML exportado (.xml o .xml.gz) y descargar tu lista en formato MAL.
+- **Notificaciones**: la extensión avisa de capítulos nuevos y, al terminar un video (90 %), ofrece marcarlo; correo diario opcional.
+- **PWA**: instalable en el celular y con la última copia de la lista disponible sin conexión.
 - **Total de capítulos automático** desde AniList: al crear, importar o abrir la lista se completan el total, los capítulos ya emitidos y la fecha del próximo (en emisión: cada 6 h; terminados: cada 7 días). Los animes agregados a mano sin total se vinculan solos si el título coincide exactamente.
 - **Diseño** en tema claro con la paleta `#F9F5EB` (fondo), `#002B5B` (texto/encabezado), `#2D4059` (secundario), `#EA5455` (acento) y `#F07B3F` (en emisión / viendo); Space Grotesk + Inter. Para texto y botones se usa `#C73E40`, el mismo rojo un poco más oscuro, para cumplir contraste AA.
 - **Fichas del catálogo** (`/explore/:anilistId`): sinopsis, géneros y etiquetas, estudio, duración, fechas, origen, puntuación, tráiler y animes relacionados. Tu detalle (`/animes/:id`) muestra también la sinopsis cuando está vinculado a AniList.
@@ -38,6 +49,15 @@ No se usan archivos `.env`. Toda la configuración vive en las **Environment Var
 | `zebanitracker-web` | `frontend/` | `NEXT_PUBLIC_SUPABASE_URL` | igual que arriba | igual |
 | | | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | publishable key | igual |
 | | | `NEXT_PUBLIC_API_URL` | `https://zebanitracker-api.vercel.app/api` | `http://localhost:4000/api` |
+
+**Opcionales** (activan funciones; sin ellas la app funciona y la opción aparece como "no disponible"):
+
+| Proyecto | Variable | Para qué |
+|---|---|---|
+| `zebanitracker-web` | `NEXT_PUBLIC_ANILIST_CLIENT_ID` | Botón "Conectar AniList". Crea un cliente en [anilist.co/settings/developer](https://anilist.co/settings/developer) con Redirect URL `https://zebanitracker-web.vercel.app/settings` |
+| `zebanitracker-api` | `CRON_SECRET` | Protege la tarea diaria `/api/cron/notify` (Vercel la envía sola) |
+| `zebanitracker-api` | `SUPABASE_SERVICE_ROLE_KEY` | La tarea diaria lee los animes de todos los usuarios que activaron correos |
+| `zebanitracker-api` | `RESEND_API_KEY`, `MAIL_FROM` | Envío de correos con [Resend](https://resend.com) |
 
 `CORS_ORIGINS` admite comodines (`*`) para cubrir los despliegues de vista previa. Los orígenes `chrome-extension://` se permiten siempre.
 
@@ -85,6 +105,14 @@ Se despliega en Vercel con el preset **NestJS** (entrada `src/main.ts`).
 | GET | `/api/catalog/anime/:anilistId` | Ficha completa (sinopsis, estudio, relaciones…) |
 | GET | `/api/catalog/filters` | Géneros y etiquetas disponibles |
 | POST | `/api/animes/import/anilist` `{ "username": "...", "statuses"?: ["CURRENT","COMPLETED"], "include_favorites"?: true }` | Importar/sincronizar lista de AniList |
+| GET | `/api/animes/activity?days=365` | Capítulos marcados (historial, racha, mapa) |
+| GET | `/api/animes/discover` | Recomendaciones y secuelas pendientes |
+| GET | `/api/animes/export/mal` | Descarga XML de MyAnimeList |
+| POST | `/api/animes/import/mal` `{ "xml": "…" }` | Importa el XML de MyAnimeList |
+| GET / PATCH | `/api/profile` | Usuario, lista pública, correos |
+| PUT / DELETE | `/api/profile/anilist` `{ "token" }` | Conectar / desconectar AniList |
+| GET | `/api/public/:username` | Lista pública (sin sesión) |
+| GET | `/api/cron/notify` | Tarea diaria de correos (Vercel Cron, `CRON_SECRET`) |
 | GET | `/api/health` | Healthcheck (público) |
 | GET | `/api/health/anilist` | Verifica la conexión con AniList (público) |
 
@@ -106,3 +134,13 @@ Se despliega en Vercel con el preset Next.js. Las variables `NEXT_PUBLIC_*` se i
 Pestañas del popup:
 - **Esta página**: detecta título y capítulo de la pestaña activa. Si coincide con un anime de tu lista, puedes marcar el capítulo visto; si no, lo agregas.
 - **Mis animes**: lista con búsqueda, favorito, `+1` y campo para fijar un capítulo.
+
+## Tests
+
+```bash
+cd frontend
+npx playwright install chromium   # una vez
+npm run test:e2e                  # compila, levanta la web y prueba con API y Supabase simulados
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) compila backend, revisa la extensión y corre los e2e en cada push y PR.

@@ -2,10 +2,18 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { api, Anime, AnimeStatus } from '@/lib/api';
+import { api, Anime, AnimeStatus, currentSeason, Discover, SEASON_LABELS, WatchEvent } from '@/lib/api';
 import { useAuth } from '@/components/AuthProvider';
 import { AnimeCard, ContinueCard } from '@/components/AnimeCard';
+import { Cover } from '@/components/Cover';
 import { SearchIcon } from '@/components/Icons';
+import { streaks } from '@/lib/activity';
+
+type Sort = 'recent' | 'title' | 'progress' | 'score' | 'next';
+const SORTS: [Sort, string][] = [
+  ['recent', 'Visto recientemente'], ['title', 'Título (A-Z)'], ['progress', 'Progreso'], ['score', 'Mi puntuación'], ['next', 'Próximo estreno'],
+];
+const CACHE_KEY = 'zt-list-cache';
 
 type Tab = 'all' | 'fav' | AnimeStatus;
 const TABS: [Tab, string][] = [
@@ -25,14 +33,38 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('all');
   const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<Sort>('recent');
+  const [offline, setOffline] = useState(false);
+  const [discover, setDiscover] = useState<Discover | null>(null);
+  const [events, setEvents] = useState<WatchEvent[]>([]);
+
+  useEffect(() => {
+    try { const s = localStorage.getItem('zt-sort') as Sort | null; if (s) setSort(s); } catch {}
+  }, []);
 
   useEffect(() => {
     if (!session) return;
     let cancelled = false;
     api.list()
-      .then((data) => { if (!cancelled) setAnimes(data); })
-      .catch((e) => !cancelled && setError(e.message))
+      .then((data) => {
+        if (cancelled) return;
+        setAnimes(data);
+        setOffline(false);
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch {}
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        // Sin conexión: muestra la última copia guardada
+        try {
+          const cached = localStorage.getItem(CACHE_KEY);
+          if (cached) { setAnimes(JSON.parse(cached)); setOffline(true); return; }
+        } catch {}
+        setError(e.message);
+      })
       .finally(() => !cancelled && setLoading(false));
+
+    api.discover().then((d) => !cancelled && setDiscover(d)).catch(() => {});
+    api.activity(120).then((e) => !cancelled && setEvents(e)).catch(() => {});
 
     // Completa capítulos/emisión desde AniList en segundo plano (el servidor solo revisa lo desactualizado)
     api.syncEpisodes()
@@ -60,10 +92,38 @@ export default function HomePage() {
 
   const library = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const pct = (a: Anime) => { const t = a.total_episodes ?? a.aired_episodes; return t ? a.watched_episodes / t : 0; };
+    const cmp: Record<Sort, (a: Anime, b: Anime) => number> = {
+      recent: (a, b) => (b.last_watched_at ?? b.updated_at).localeCompare(a.last_watched_at ?? a.updated_at),
+      title: (a, b) => a.title.localeCompare(b.title, 'es'),
+      progress: (a, b) => pct(b) - pct(a),
+      score: (a, b) => (b.score ?? 0) - (a.score ?? 0),
+      next: (a, b) => (a.next_episode_at ?? '9999').localeCompare(b.next_episode_at ?? '9999'),
+    };
     return animes
       .filter((a) => tab === 'all' || (tab === 'fav' ? a.is_favorite : a.status === tab))
-      .filter((a) => !q || a.title.toLowerCase().includes(q));
-  }, [animes, tab, query]);
+      .filter((a) => !q || a.title.toLowerCase().includes(q))
+      .sort(cmp[sort]);
+  }, [animes, tab, query, sort]);
+
+  const streak = useMemo(() => streaks(events).current, [events]);
+  const season = currentSeason();
+
+  async function addFromCatalog(m: Discover['recommendations'][number]['media'], status: AnimeStatus) {
+    try {
+      const created = await api.create({
+        title: m.title, total_episodes: m.total_episodes, cover_url: m.cover_url, source_url: m.site_url,
+        anilist_id: m.anilist_id, status, watched_episodes: 0,
+      });
+      setAnimes((l) => [created, ...l]);
+      setDiscover((d) => d && {
+        recommendations: d.recommendations.filter((r) => r.media.anilist_id !== m.anilist_id),
+        sequels: d.sequels.filter((x) => x.media.anilist_id !== m.anilist_id),
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
 
   const episodes = animes.reduce((n, a) => n + a.watched_episodes, 0);
   const stats = [
@@ -84,6 +144,7 @@ export default function HomePage() {
         <div>
           <span className="muted small">{today}</span>
           <h1>Hola{name ? `, ${name}` : ''}</h1>
+          {streak > 1 && <span className="streak" style={{ marginTop: 10 }}>Racha de {streak} días</span>}
           <p>
             {loading ? 'Cargando tu lista…'
               : animes.length === 0 ? 'Tu lista está vacía. Empieza explorando o importando de AniList.'
@@ -98,6 +159,7 @@ export default function HomePage() {
       </section>
 
       {error && <p className="error">{error}</p>}
+      {offline && <div className="banner">Sin conexión: estás viendo la última copia guardada de tu lista.</div>}
 
       {continueList.length > 0 && (
         <section>
@@ -111,6 +173,36 @@ export default function HomePage() {
         </section>
       )}
 
+      {discover && discover.sequels.length > 0 && (
+        <section>
+          <div className="section-head">
+            <h2>Secuelas pendientes</h2>
+            <span className="muted small">Terminaste la temporada anterior</span>
+          </div>
+          <div className="rail">
+            {discover.sequels.map((s) => (
+              <MiniCard key={s.media.anilist_id} media={s.media} note={`Después de ${s.after}`} onAdd={addFromCatalog} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {discover && discover.recommendations.length > 0 && (
+        <section>
+          <div className="section-head">
+            <h2>Para ti</h2>
+            <Link href={`/explore?season=${season.season}&year=${season.year}`} className="small">
+              Ver estrenos de {SEASON_LABELS[season.season].toLowerCase()} {season.year} →
+            </Link>
+          </div>
+          <div className="rail">
+            {discover.recommendations.map((r) => (
+              <MiniCard key={r.media.anilist_id} media={r.media} note={`Porque viste ${r.because[0]}`} onAdd={addFromCatalog} />
+            ))}
+          </div>
+        </section>
+      )}
+
       <section>
         <div className="section-head">
           <h2>Mi biblioteca</h2>
@@ -120,12 +212,19 @@ export default function HomePage() {
             <input placeholder="Buscar en mi lista…" value={query} onChange={(e) => setQuery(e.target.value)} />
           </label>
         </div>
-        <div className="tabs" role="tablist" aria-label="Filtrar por estado" style={{ marginBottom: 20 }}>
-          {TABS.map(([id, label]) => (
-            <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
-              {label}<span className="badge-count">{counts[id] ?? 0}</span>
-            </button>
-          ))}
+        <div className="toolbar-row">
+          <div className="tabs" role="tablist" aria-label="Filtrar por estado">
+            {TABS.map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
+                {label}<span className="badge-count">{counts[id] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+          <label className="row muted small">Ordenar
+            <select value={sort} onChange={(e) => { const v = e.target.value as Sort; setSort(v); try { localStorage.setItem('zt-sort', v); } catch {} }}>
+              {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
         </div>
 
         {loading ? (
@@ -147,5 +246,27 @@ export default function HomePage() {
         )}
       </section>
     </main>
+  );
+}
+
+function MiniCard({ media, note, onAdd }: {
+  media: Discover['recommendations'][number]['media'];
+  note: string;
+  onAdd: (m: Discover['recommendations'][number]['media'], status: AnimeStatus) => void;
+}) {
+  return (
+    <article className="result">
+      <Cover src={media.cover_url} title={media.title}>
+        <Link href={`/explore/${media.anilist_id}`} className="cover-link" aria-label={`Ver ficha de ${media.title}`} />
+        <div className="reveal">
+          <button className="btn primary" onClick={() => onAdd(media, 'watching')}>Empezar a ver</button>
+          <button className="btn light" onClick={() => onAdd(media, 'plan_to_watch')}>+ Pendiente</button>
+        </div>
+      </Cover>
+      <div className="result-info">
+        <h3><Link href={`/explore/${media.anilist_id}`}>{media.title}</Link></h3>
+        <span className="because">{note}</span>
+      </div>
+    </article>
   );
 }

@@ -28,7 +28,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
-    const isPublic = PUBLIC_ROUTES.includes(pathname);
+    const isPublic = PUBLIC_ROUTES.includes(pathname) || pathname.startsWith('/u/');
+    if (pathname.startsWith('/u/')) return; // lista compartida: se ve con o sin sesión
     if (!session && !isPublic) router.replace('/login');
     if (session && isPublic) router.replace('/');
   }, [session, loading, pathname, router]);

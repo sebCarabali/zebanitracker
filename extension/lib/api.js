@@ -21,7 +21,8 @@ async function request(path, { method = 'GET', body } = {}) {
 export const api = {
   list: (search = '') => request(`/animes${search ? `?search=${encodeURIComponent(search)}` : ''}`),
   create: (anime) => request('/animes', { method: 'POST', body: anime }),
-  setProgress: (id, episode) => request(`/animes/${id}/progress`, { method: 'PATCH', body: { episode } }),
+  setProgress: (id, episode, url) => request(`/animes/${id}/progress`, { method: 'PATCH', body: { episode, ...(url ? { url } : {}) } }),
+  syncEpisodes: () => request('/animes/sync-episodes', { method: 'POST', body: {} }),
   next: (id) => request(`/animes/${id}/progress/next`, { method: 'POST' }),
   toggleFavorite: (id) => request(`/animes/${id}/favorite`, { method: 'POST' }),
   searchCatalog: (q) => request(`/catalog/search?q=${encodeURIComponent(q)}`),

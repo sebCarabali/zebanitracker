@@ -7,6 +7,8 @@ import { AIRING_LABELS, api, Anime, AnimeDetails, AnimeStatus, FORMAT_LABELS, re
 import { useAuth } from '@/components/AuthProvider';
 import { Cover } from '@/components/Cover';
 import { BackIcon, PlayIcon, RefreshIcon, StarIcon } from '@/components/Icons';
+import { NextLinks } from '@/components/AnimeCard';
+import { Stars } from '@/components/Stars';
 
 const RING_R = 56;
 const RING_C = 2 * Math.PI * RING_R;
@@ -21,6 +23,8 @@ export default function AnimeDetailPage() {
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState({ title: '', total: '', source: '', notes: '' });
   const [details, setDetails] = useState<AnimeDetails | null>(null);
+  const [review, setReview] = useState('');
+  const [reviewSaved, setReviewSaved] = useState(false);
   const [showFull, setShowFull] = useState(false);
 
   // Ficha de AniList (sinopsis, estudio…) para los animes vinculados
@@ -36,6 +40,7 @@ export default function AnimeDetailPage() {
 
   function load(a: Anime) {
     setAnime(a);
+    setReview(a.review ?? '');
     setForm({ title: a.title, total: a.total_episodes?.toString() ?? '', source: a.source_url ?? '', notes: a.notes ?? '' });
   }
 
@@ -118,6 +123,7 @@ export default function AnimeDetailPage() {
                 {anime.anilist_id ? 'Vinculado a AniList' : 'Agregado a mano'}
                 {anime.last_watched_at && ` · Último capítulo marcado ${relativeTime(anime.last_watched_at)}`}
               </p>
+              <div className="hero-next"><NextLinks anime={anime} /></div>
               <div className="row" style={{ gap: 10, marginTop: 6 }}>
                 <button className="btn primary lg" disabled={busy || done}
                   onClick={() => run(() => api.next(anime.id), { watched_episodes: anime.watched_episodes + 1 })}>
@@ -232,6 +238,21 @@ export default function AnimeDetailPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <h2 className="section-label">Tu valoración</h2>
+            <Stars value={anime.score} disabled={busy}
+              onChange={(v) => run(() => api.update(anime.id, { score: v }), { score: v })} />
+            <label className="form" style={{ gap: 6 }}>
+              <span className="muted small">Reseña (solo tú la ves, salvo en la exportación a MAL)</span>
+              <textarea rows={4} maxLength={5000} value={review} placeholder="¿Qué te pareció?"
+                onChange={(e) => { setReview(e.target.value); setReviewSaved(false); }} />
+            </label>
+            <button className="btn navy" disabled={busy || review === (anime.review ?? '')}
+              onClick={async () => { const a = await run(() => api.update(anime.id, { review: review.trim() || null })); if (a) setReviewSaved(true); }}>
+              {reviewSaved ? '✓ Reseña guardada' : 'Guardar reseña'}
+            </button>
           </div>
 
           <form className="panel form" onSubmit={save}>

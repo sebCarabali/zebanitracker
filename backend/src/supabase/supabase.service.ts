@@ -20,6 +20,18 @@ export class SupabaseService {
     });
   }
 
+  /** Cliente anónimo (para funciones públicas como la lista compartida). */
+  anon(): SupabaseClient {
+    return this.authClient;
+  }
+
+  /** Cliente con service role (solo tareas programadas). Null si la variable no está configurada. */
+  admin(): SupabaseClient | null {
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!key) return null;
+    return createClient(this.url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  }
+
   async getUser(accessToken: string): Promise<User | null> {
     const { data, error } = await this.authClient.auth.getUser(accessToken);
     if (error) return null;

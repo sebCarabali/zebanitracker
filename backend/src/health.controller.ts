@@ -20,8 +20,12 @@ export class HealthController {
     ]);
     const byId = results[0] ? (await this.anilist.byIds([results[0].anilist_id])).get(results[0].anilist_id) : undefined;
     const details = results[0] ? await this.anilist.details(results[0].anilist_id) : undefined;
+    const disc = results[0] ? await this.anilist.discover([results[0].anilist_id], [results[0].anilist_id]) : undefined;
+    const mal = results[0]?.mal_id ? await this.anilist.byMalIds([results[0].mal_id]) : undefined;
     return {
-      ok: results.length > 0 && browse.results.length > 0 && filters.genres.length > 0 && !!byId && !!details,
+      ok: results.length > 0 && browse.results.length > 0 && filters.genres.length > 0 && !!byId && !!details && !!disc && !!mal?.size,
+      discover: disc ? { recommendations: disc.recommendations.length, sequels: disc.sequels.map((x) => x.media.title) } : null,
+      mal: results[0]?.mal_id ? { mal_id: results[0].mal_id, back_to_anilist: mal?.get(results[0].mal_id)?.anilist_id ?? null } : null,
       details: details ? {
         studios: details.studios, duration: details.duration, relations: details.relations.length,
         tags: details.tags.length, description: details.description?.slice(0, 80) ?? null,
