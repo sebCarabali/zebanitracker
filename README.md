@@ -19,6 +19,7 @@ zebanitracker/
 - Reglas automáticas: llegar al último capítulo → *Completado*; marcar *Completado* rellena el progreso; no se puede superar el total.
 - **Calendario** (`/calendar`): estrenos de los próximos 7 días y capítulos ya emitidos que aún no ves.
 - **Puntuación (1-10) y reseña** por anime; orden de la biblioteca por recientes, título, progreso, puntuación o próximo estreno.
+- **Temporadas**: cada anime se vincula a su franquicia siguiendo precuelas/secuelas de AniList (`franchise_id`, `season_number`). Panel "Temporadas" en el detalle y en las fichas (temporadas, películas y extras en orden, tu estado en cada una, agregar las que faltan, "¿Seguimos con la Temporada N?" al terminar una), y opción "Agrupar temporadas" en Mi lista con el avance de toda la serie.
 - **Ver en JKAnime**: botones "Ver cap. N en JKAnime" y "Buscar en JKAnime", y selector "Ir al capítulo" en el detalle. El enlace usa el slug del anime (`{dominio}/{slug}/{n}/`): se aprende de la página pegada en *Dónde lo veo* o desde la que marcaste un capítulo; si no hay, se deriva del título en romaji. El dominio se cambia en Ajustes (web) y en `extension/config.js` → `WATCH_BASE`. La extensión reconoce anime y capítulo directamente de la URL de JKAnime.
 - **Continuar con un clic**: al marcar desde la extensión se guarda la página del capítulo y se ofrece "Abrir cap. N+1" (adivina la URL).
 - **Historial**: cada capítulo marcado queda registrado (`watch_events`) → racha diaria y mapa de actividad.
@@ -104,6 +105,8 @@ Se despliega en Vercel con el preset **NestJS** (entrada `src/main.ts`).
 | GET | `/api/catalog/search?q=frieren` | Autocompletado en el catálogo de AniList |
 | GET | `/api/catalog/browse?search=&genres=Action,Fantasy&tags=Magic&year=2023&season=FALL&formats=TV,MOVIE&status=FINISHED&sort=SCORE_DESC&page=1` | Explorar con filtros (24 por página) |
 | GET | `/api/catalog/anime/:anilistId` | Ficha completa (sinopsis, estudio, relaciones…) |
+| GET | `/api/catalog/anime/:anilistId/seasons` | Temporadas, películas y extras de la franquicia |
+| POST | `/api/animes/batch` `{ "items": [{ "anilist_id", "status" }] }` | Agregar varias temporadas de una vez |
 | GET | `/api/catalog/filters` | Géneros y etiquetas disponibles |
 | POST | `/api/animes/import/anilist` `{ "username": "...", "statuses"?: ["CURRENT","COMPLETED"], "include_favorites"?: true }` | Importar/sincronizar lista de AniList |
 | GET | `/api/animes/activity?days=365` | Capítulos marcados (historial, racha, mapa) |

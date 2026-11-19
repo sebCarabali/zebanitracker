@@ -7,7 +7,7 @@ export function anime(over: Record<string, unknown> = {}) {
     id: 'a1', title: 'Frieren: Beyond Journey’s End', title_romaji: 'Sousou no Frieren', total_episodes: 28, aired_episodes: 28, watched_episodes: 12,
     status: 'watching', is_favorite: true, cover_url: null, source_url: null, notes: null, score: null, review: null,
     anilist_id: 154587, mal_id: 52991, genres: ['Adventure', 'Fantasy'], studios: ['MADHOUSE'], format: 'TV', season_year: 2023,
-    airing_status: 'FINISHED', next_episode_at: null, last_episode_url: null, completed_at: null,
+    airing_status: 'FINISHED', next_episode_at: null, last_episode_url: null, completed_at: null, franchise_id: null, season_number: null,
     last_watched_at: '2026-11-13T10:00:00Z', created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-13T10:00:00Z',
     ...over,
   };
@@ -20,7 +20,10 @@ export const DATA = [
     airing_status: 'RELEASING', next_episode_at: new Date(Date.now() + 2 * 86_400_000).toISOString(),
     last_episode_url: 'https://example.com/ver/dandadan-7',
   }),
-  anime({ id: 'a3', title: 'Solo Leveling', total_episodes: 12, aired_episodes: 12, watched_episodes: 12, status: 'completed', score: 9, anilist_id: 3 }),
+  anime({ id: 'a3', title: 'Solo Leveling', total_episodes: 12, aired_episodes: 12, watched_episodes: 12, status: 'completed', score: 9, anilist_id: 3, franchise_id: 3, season_number: 1 }),
+  anime({ id: 'a5', title: 'Solo Leveling Season 2', title_romaji: 'Ore dake Level Up na Ken Season 2', total_episodes: 13, aired_episodes: 13,
+    watched_episodes: 4, status: 'watching', is_favorite: false, anilist_id: 30, franchise_id: 3, season_number: 2,
+    last_watched_at: '2026-11-10T10:00:00Z', updated_at: '2026-11-10T10:00:00Z' }),
   anime({ id: 'a4', title: 'Spy x Family', total_episodes: 25, watched_episodes: 0, status: 'plan_to_watch', is_favorite: false, anilist_id: 4 }),
 ];
 

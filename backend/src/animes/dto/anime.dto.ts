@@ -1,7 +1,7 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
-  ArrayUnique, IsArray, IsBoolean, Matches, Length, Max, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength, Min,
+  ArrayMaxSize, ArrayUnique, ValidateNested, IsArray, IsBoolean, Matches, Length, Max, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength, Min,
 } from 'class-validator';
 
 export enum AnimeStatus {
@@ -109,4 +109,17 @@ export class ImportMalDto {
   /** Contenido del XML exportado desde MyAnimeList. */
   @IsString() @MaxLength(5_000_000)
   xml: string;
+}
+
+export class AddManyItem {
+  @IsInt() @Min(1)
+  anilist_id: number;
+
+  @IsEnum(AnimeStatus)
+  status: AnimeStatus;
+}
+
+export class AddManyDto {
+  @IsArray() @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => AddManyItem)
+  items: AddManyItem[];
 }

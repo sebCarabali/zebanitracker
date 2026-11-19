@@ -5,7 +5,7 @@ import type { Response } from 'express';
 import { SupabaseAuthGuard } from '../auth/auth.guard.js';
 import { AccessToken, UserId } from '../auth/current-user.decorator.js';
 import { AnimesService } from './animes.service.js';
-import { CreateAnimeDto, ImportAniListDto, ImportMalDto, ListAnimesQuery, SetProgressDto, SyncEpisodesDto, UpdateAnimeDto } from './dto/anime.dto.js';
+import { AddManyDto, CreateAnimeDto, ImportAniListDto, ImportMalDto, ListAnimesQuery, SetProgressDto, SyncEpisodesDto, UpdateAnimeDto } from './dto/anime.dto.js';
 
 @Controller('animes')
 @UseGuards(SupabaseAuthGuard)
@@ -39,6 +39,12 @@ export class AnimesController {
     res.setHeader('X-Skipped', String(skipped));
     res.setHeader('Access-Control-Expose-Headers', 'X-Exported, X-Skipped, Content-Disposition');
     res.send(xml);
+  }
+
+  /** Agrega varias temporadas/animes del catálogo de una vez. */
+  @Post('batch')
+  addMany(@AccessToken() token: string, @UserId() userId: string, @Body() dto: AddManyDto) {
+    return this.animes.addMany(token, userId, dto.items);
   }
 
   /** Importa el XML exportado desde MyAnimeList. */

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { api, Anime, AnimeStatus, currentSeason, Discover, SEASON_LABELS, WatchEvent } from '@/lib/api';
 import { useAuth } from '@/components/AuthProvider';
-import { AnimeCard, ContinueCard } from '@/components/AnimeCard';
+import { AnimeCard, ContinueCard, SeasonGroup } from '@/components/AnimeCard';
 import { Cover } from '@/components/Cover';
 import { SearchIcon } from '@/components/Icons';
 import { streaks } from '@/lib/activity';
@@ -34,12 +34,16 @@ export default function HomePage() {
   const [tab, setTab] = useState<Tab>('all');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<Sort>('recent');
+  const [grouped, setGrouped] = useState(false);
   const [offline, setOffline] = useState(false);
   const [discover, setDiscover] = useState<Discover | null>(null);
   const [events, setEvents] = useState<WatchEvent[]>([]);
 
   useEffect(() => {
-    try { const s = localStorage.getItem('zt-sort') as Sort | null; if (s) setSort(s); } catch {}
+    try {
+      const s = localStorage.getItem('zt-sort') as Sort | null; if (s) setSort(s);
+      setGrouped(localStorage.getItem('zt-group') === '1');
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -105,6 +109,40 @@ export default function HomePage() {
       .filter((a) => !q || a.title.toLowerCase().includes(q))
       .sort(cmp[sort]);
   }, [animes, tab, query, sort]);
+
+  // Agrupar temporadas: una tarjeta por franquicia con el avance de toda la serie
+  const cards = useMemo((): { anime: Anime; group?: SeasonGroup }[] => {
+    if (!grouped) return library.map((anime) => ({ anime }));
+    const keyOf = (a: Anime) => (a.franchise_id ? `f${a.franchise_id}` : a.id);
+    const all = new Map<string, Anime[]>();
+    for (const a of animes) all.set(keyOf(a), [...(all.get(keyOf(a)) ?? []), a]);
+    const seen = new Set<string>();
+    const out: { anime: Anime; group?: SeasonGroup }[] = [];
+    for (const a of library) {
+      const k = keyOf(a);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const members = all.get(k)!;
+      if (members.length < 2) { out.push({ anime: a }); continue; }
+      const inLib = library.filter((x) => keyOf(x) === k);
+      const bySeason = (x: Anime, y: Anime) => (x.season_number ?? 99) - (y.season_number ?? 99);
+      // Representante: la que estás viendo; si no, la primera sin terminar; si no, la última
+      const rep = inLib.find((x) => x.status === 'watching')
+        ?? [...inLib].sort(bySeason).find((x) => x.status !== 'completed')
+        ?? [...inLib].sort(bySeason).at(-1)!;
+      const totals = members.map((x) => x.total_episodes ?? x.aired_episodes);
+      out.push({
+        anime: rep,
+        group: {
+          count: members.length,
+          completed: members.filter((x) => x.status === 'completed').length,
+          watched: members.reduce((n, x) => n + x.watched_episodes, 0),
+          total: totals.every((t) => t !== null) ? totals.reduce((n, t) => n + t!, 0) : null,
+        },
+      });
+    }
+    return out;
+  }, [grouped, library, animes]);
 
   const streak = useMemo(() => streaks(events).current, [events]);
   const season = currentSeason();
@@ -220,6 +258,11 @@ export default function HomePage() {
               </button>
             ))}
           </div>
+          <label className="check small" style={{ minHeight: 40 }}>
+            <input type="checkbox" checked={grouped}
+              onChange={(e) => { setGrouped(e.target.checked); try { localStorage.setItem('zt-group', e.target.checked ? '1' : '0'); } catch {} }} />
+            Agrupar temporadas
+          </label>
           <label className="row muted small">Ordenar
             <select value={sort} onChange={(e) => { const v = e.target.value as Sort; setSort(v); try { localStorage.setItem('zt-sort', v); } catch {} }}>
               {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -241,7 +284,7 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="grid">
-            {library.map((a) => <AnimeCard key={a.id} anime={a} onChange={replace} />)}
+            {cards.map(({ anime: a, group }) => <AnimeCard key={a.id} anime={a} group={group} onChange={replace} />)}
           </div>
         )}
       </section>

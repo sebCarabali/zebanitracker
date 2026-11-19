@@ -29,6 +29,9 @@ export interface Anime {
   next_episode_at: string | null;
   episodes_synced_at: string | null;
   last_episode_url: string | null;
+  franchise_id: number | null;
+  season_number: number | null;
+  franchise_synced_at: string | null;
   last_watched_at: string | null;
   completed_at: string | null;
   created_at: string;
@@ -375,11 +378,78 @@ ${entries}
     }
     await this.applyUpdates(token, updates);
 
+    let seasons = 0;
+    try {
+      seasons = await this.syncFranchises(token, { ids: opts.ids, force: opts.force });
+    } catch (e) {
+      this.logger.warn(`No se pudieron calcular temporadas: ${(e as Error).message}`);
+    }
+
     return {
       checked: candidates.length,
-      updated: updates.filter((u) => Object.keys(u.row).length > 1).length,
+      updated: updates.filter((u) => Object.keys(u.row).length > 1).length + seasons,
       linked: newLinks.size,
     };
+  }
+
+  /**
+   * Completa franchise_id (primera entrega) y season_number de los animes vinculados.
+   * Máximo 60 por llamada; se recalcula cada 30 días (por si se anuncian temporadas nuevas).
+   */
+  async syncFranchises(token: string, opts: { ids?: string[]; force?: boolean } = {}): Promise<number> {
+    let query = this.table(token).select('id, anilist_id, franchise_id, season_number, franchise_synced_at').not('anilist_id', 'is', null);
+    if (opts.ids?.length) query = query.in('id', opts.ids);
+    const { data, error } = await query;
+    if (error) this.fail(error);
+    const month = 30 * 24 * 3600_000;
+    const rows = ((data ?? []) as Anime[])
+      .filter((a) => opts.force || !a.franchise_synced_at || Date.now() - new Date(a.franchise_synced_at).getTime() > month)
+      .slice(0, 60);
+    if (!rows.length) return 0;
+
+    const franchises = await this.anilist.franchises(rows.map((a) => a.anilist_id!));
+    const now = new Date().toISOString();
+    const updates = rows.map((a) => {
+      const f = franchises.get(a.anilist_id!);
+      const entry = f?.entries.find((e) => e.media.anilist_id === a.anilist_id);
+      return {
+        id: a.id,
+        row: { franchise_id: f?.root ?? a.anilist_id, season_number: entry?.season_number ?? null, franchise_synced_at: now },
+      };
+    });
+    await this.applyUpdates(token, updates);
+    return updates.filter((u, i) => u.row.franchise_id !== rows[i].franchise_id || u.row.season_number !== rows[i].season_number).length;
+  }
+
+  /** Agrega varios animes del catálogo de una vez (p. ej. todas las temporadas que faltan). */
+  async addMany(token: string, userId: string, items: { anilist_id: number; status: AnimeStatus }[]) {
+    const { data: existing, error } = await this.table(token).select('anilist_id').not('anilist_id', 'is', null);
+    if (error) this.fail(error);
+    const have = new Set((existing ?? []).map((r) => (r as { anilist_id: number }).anilist_id));
+    const wanted = items.filter((i) => !have.has(i.anilist_id));
+    if (!wanted.length) return [];
+
+    const [media, franchises] = await Promise.all([
+      this.anilist.byIds(wanted.map((i) => i.anilist_id)),
+      this.anilist.franchises(wanted.map((i) => i.anilist_id)).catch(() => new Map()),
+    ]);
+    const now = new Date().toISOString();
+    const rows = wanted.flatMap((i) => {
+      const m = media.get(i.anilist_id);
+      if (!m) return [];
+      const f = franchises.get(i.anilist_id);
+      const entry = f?.entries.find((e: { media: CatalogAnime }) => e.media.anilist_id === i.anilist_id);
+      return [{
+        user_id: userId, title: m.title, anilist_id: m.anilist_id, total_episodes: m.total_episodes,
+        watched_episodes: i.status === AnimeStatus.Completed && m.total_episodes ? m.total_episodes : 0,
+        status: i.status, cover_url: m.cover_url, source_url: m.site_url,
+        ...metadataFields(m),
+        franchise_id: f?.root ?? m.anilist_id, season_number: entry?.season_number ?? null, franchise_synced_at: now,
+      }];
+    });
+    const { data, error: insErr } = await this.table(token).insert(rows).select();
+    if (insErr) this.fail(insErr);
+    return data as Anime[];
   }
 
   private async applyUpdates(token: string, updates: { id: string; row: Record<string, unknown> }[]) {

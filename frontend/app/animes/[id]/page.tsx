@@ -9,6 +9,7 @@ import { Cover } from '@/components/Cover';
 import { BackIcon, PlayIcon, RefreshIcon, StarIcon } from '@/components/Icons';
 import { NextLinks } from '@/components/AnimeCard';
 import { WatchLinks } from '@/components/WatchLinks';
+import { SeasonsPanel } from '@/components/SeasonsPanel';
 import { Stars } from '@/components/Stars';
 
 const RING_R = 56;
@@ -104,6 +105,7 @@ export default function AnimeDetailPage() {
   }
 
   const tags = [
+    anime.season_number && anime.season_number > 1 ? `Temporada ${anime.season_number}` : null,
     total ? `${total} caps.` : aired ? `${aired} caps. emitidos` : 'Capítulos desconocidos',
     anime.airing_status ? AIRING_LABELS[anime.airing_status] : null,
     nextAt ? `Cap. ${(aired ?? 0) + 1} ${relativeTime(nextAt)}` : null,
@@ -227,6 +229,7 @@ export default function AnimeDetailPage() {
             </dl>
           </section>
         )}
+        {anime.anilist_id && <SeasonsPanel key={anime.anilist_id} currentAnilistId={anime.anilist_id} />}
         </div>
 
         <aside className="detail-side">

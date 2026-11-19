@@ -30,6 +30,14 @@ export class CatalogController {
     return this.anilist.details(id);
   }
 
+  /** Todas las temporadas, películas y OVAs de la franquicia, en orden de estreno. */
+  @Get('anime/:id/seasons')
+  async seasons(@Param('id', ParseIntPipe) id: number) {
+    const f = (await this.anilist.franchises([id])).get(id);
+    if (!f) return { root: id, entries: [] };
+    return f;
+  }
+
   /** Géneros y etiquetas disponibles para los filtros. */
   @Get('filters')
   filters() {

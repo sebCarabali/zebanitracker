@@ -26,6 +26,14 @@ export interface CatalogAnime {
   studios: string[];
 }
 
+export interface FranchiseEntry {
+  media: CatalogAnime;
+  start: string | null;          // YYYY-MM-DD para ordenar
+  season_number: number | null;  // 1, 2, 3… solo para series (TV, TV corto, ONA)
+  label: string;                 // "Temporada 2", "Película", "OVA"…
+}
+export interface Franchise { root: number; entries: FranchiseEntry[] }
+
 export interface DiscoverItem { media: CatalogAnime; because: string[]; rating: number }
 export interface SequelItem { media: CatalogAnime; after: string }
 
@@ -195,6 +203,18 @@ mutation ($mediaId: Int, $progress: Int, $status: MediaListStatus, $scoreRaw: In
   SaveMediaListEntry(mediaId: $mediaId, progress: $progress, status: $status, scoreRaw: $scoreRaw) { id }
 }`;
 
+const FRANCHISE_QUERY = `
+query ($ids: [Int]) {
+  Page(perPage: 50) {
+    media(id_in: $ids, type: ANIME) {
+      ${MEDIA_FIELDS}
+      isAdult
+      startDate { year month day }
+      relations { edges { relationType(version: 2) node { id type } } }
+    }
+  }
+}`;
+
 const FILTERS_QUERY = `
 query {
   GenreCollection
@@ -223,6 +243,7 @@ export class AniListService {
   private readonly browseCache = new Map<string, { at: number; data: BrowseResult }>();
   private readonly detailsCache = new Map<number, { at: number; data: AnimeDetails }>();
   private readonly discoverCache = new Map<string, { at: number; data: any[] }>();
+  private readonly franchiseCache = new Map<number, { at: number; data: Franchise }>();
   private filtersCache: { at: number; data: FilterOptions } | null = null;
   private static readonly TTL_MS = 10 * 60 * 1000;
   private static readonly MAX_CACHE = 300;
@@ -448,6 +469,83 @@ export class AniListService {
       recommendations: [...recs.values()].sort((a, b) => b.because.length - a.because.length || b.rating - a.rating),
       sequels: [...sequels.values()],
     };
+  }
+
+  /**
+   * Agrupa animes en franquicias siguiendo precuelas/secuelas (BFS por niveles, lotes de 50 por petición).
+   * Devuelve, para cada ID pedido, su franquicia ordenada por fecha. Caché de 24 h por ID.
+   */
+  async franchises(ids: number[]): Promise<Map<number, Franchise>> {
+    const out = new Map<number, Franchise>();
+    const pending = [...new Set(ids)].filter((id) => {
+      const hit = this.franchiseCache.get(id);
+      if (hit && Date.now() - hit.at < 24 * 3600_000) { out.set(id, hit.data); return false; }
+      return true;
+    });
+    if (!pending.length) return out;
+
+    type Node = RawMedia & { isAdult: boolean; startDate: { year: number | null; month: number | null; day: number | null } | null;
+      relations: { edges: { relationType: string; node: { id: number; type: string } }[] } };
+    const nodes = new Map<number, Node>();
+    let frontier = pending;
+    for (let depth = 0; depth < 10 && frontier.length && nodes.size < 300; depth++) {
+      const next = new Set<number>();
+      for (let i = 0; i < frontier.length; i += 50) {
+        const data = await this.query<{ Page: { media: Node[] } }>(FRANCHISE_QUERY, { ids: frontier.slice(i, i + 50) });
+        for (const m of data.Page.media) {
+          nodes.set(m.id, m);
+          for (const e of m.relations.edges) {
+            if ((e.relationType === 'PREQUEL' || e.relationType === 'SEQUEL') && e.node.type === 'ANIME' && !nodes.has(e.node.id)) {
+              next.add(e.node.id);
+            }
+          }
+        }
+      }
+      frontier = [...next].filter((id) => !nodes.has(id));
+    }
+
+    // Componentes conexos (unión-búsqueda) sobre las aristas precuela/secuela
+    const parent = new Map<number, number>();
+    const find = (x: number): number => { const p = parent.get(x) ?? x; if (p === x) return x; const r = find(p); parent.set(x, r); return r; };
+    const union = (a: number, b: number) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+    for (const m of nodes.values()) {
+      for (const e of m.relations.edges) {
+        if ((e.relationType === 'PREQUEL' || e.relationType === 'SEQUEL') && nodes.has(e.node.id)) union(m.id, e.node.id);
+      }
+    }
+    const groups = new Map<number, Node[]>();
+    for (const m of nodes.values()) {
+      if (m.isAdult) continue;
+      const r = find(m.id);
+      groups.set(r, [...(groups.get(r) ?? []), m]);
+    }
+
+    const SERIES = new Set(['TV', 'TV_SHORT', 'ONA']);
+    const FORMAT_LABEL: Record<string, string> = { MOVIE: 'Película', OVA: 'OVA', SPECIAL: 'Especial', MUSIC: 'Video musical', ONA: 'ONA', TV_SHORT: 'TV corto' };
+    const startKey = (m: Node) => m.startDate?.year
+      ? `${m.startDate.year}-${String(m.startDate.month ?? 12).padStart(2, '0')}-${String(m.startDate.day ?? 28).padStart(2, '0')}`
+      : '9999-12-31';
+    for (const members of groups.values()) {
+      members.sort((a, b) => startKey(a).localeCompare(startKey(b)) || a.id - b.id);
+      let n = 0;
+      const entries: FranchiseEntry[] = members.map((m) => {
+        const isSeries = SERIES.has(m.format ?? '');
+        const season = isSeries ? ++n : null;
+        return {
+          media: AniListService.normalize(m),
+          start: m.startDate?.year ? startKey(m) : null,
+          season_number: season,
+          label: isSeries ? `Temporada ${season}` : FORMAT_LABEL[m.format ?? ''] ?? (m.format ?? 'Extra'),
+        };
+      });
+      const franchise: Franchise = { root: members[0].id, entries };
+      for (const m of members) {
+        this.franchiseCache.set(m.id, { at: Date.now(), data: franchise });
+        if (pending.includes(m.id)) out.set(m.id, franchise);
+      }
+    }
+    if (this.franchiseCache.size > 2000) this.franchiseCache.clear();
+    return out;
   }
 
   /** Convierte IDs de MyAnimeList a animes de AniList (lotes de 50). */

@@ -321,6 +321,25 @@ label.check input { width: 20px; min-height: 20px; height: 20px; accent-color: v
 .switch:disabled { opacity: .5; cursor: not-allowed; }
 .btn.disabled { opacity: .45; pointer-events: none; }
 
+/* ---------- Temporadas ---------- */
+.seasons { display: flex; flex-direction: column; gap: 16px; }
+.season-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; counter-reset: s; }
+.season-list li { display: flex; align-items: center; gap: 14px; padding: 10px; border-radius: 14px; border: 1px solid var(--border); background: #FFFFFF; }
+.season-list li.current { border: 2px solid var(--accent-strong); background: var(--surface); }
+.season-cover .cover { width: 48px; border-radius: 8px; }
+.season-cover .cover .initial { font-size: 1.2rem; }
+.season-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.season-label { color: var(--accent-strong); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.season-title { color: var(--text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.season-title:hover { color: var(--accent-strong); }
+.season-state .btn { min-height: 40px; font-size: .82rem; padding: 0 .8rem; }
+.pill-inline { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 99px; background: var(--surface-2); color: var(--text); font-size: .8rem; font-weight: 600; white-space: nowrap; }
+.pill-inline .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.group-pill { position: absolute; bottom: 10px; left: 10px; z-index: 1; padding: 4px 9px; border-radius: 8px; background: var(--navy); color: var(--cream); font-size: .72rem; font-weight: 700; }
+.airing-pill ~ .group-pill { bottom: 44px; }
+.season-tag { color: var(--accent-strong); font-weight: 700; }
+@media (max-width: 600px) { .season-list li { flex-wrap: wrap; } .season-state { width: 100%; } }
+
 /* ---------- Ver en JKAnime ---------- */
 .watch-links { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .watch-links a { font-weight: 600; }

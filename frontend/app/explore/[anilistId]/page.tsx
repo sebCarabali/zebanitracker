@@ -11,6 +11,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { Cover } from '@/components/Cover';
 import { BackIcon, CheckIcon, PlayIcon, PlusIcon } from '@/components/Icons';
 import { WatchLinks } from '@/components/WatchLinks';
+import { SeasonsPanel } from '@/components/SeasonsPanel';
 
 export default function CatalogDetailPage() {
   const { anilistId } = useParams<{ anilistId: string }>();
@@ -128,6 +129,9 @@ export default function CatalogDetailPage() {
               </div>
             </section>
           )}
+
+          <SeasonsPanel key={anime.anilist_id} currentAnilistId={anime.anilist_id}
+            onListChange={(added) => { const me = added.find((a) => a.anilist_id === anime.anilist_id); if (me) setMine(me); }} />
 
           {anime.relations.length > 0 && (
             <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

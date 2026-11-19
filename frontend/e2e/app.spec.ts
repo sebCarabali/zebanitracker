@@ -4,8 +4,8 @@ test('Mi lista muestra estadísticas, continúa viendo y la biblioteca', async (
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Hola, Sebastian' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Continúa viendo' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /Todos/ })).toContainText('4');
-  await expect(page.locator('.card')).toHaveCount(4);
+  await expect(page.getByRole('tab', { name: /Todos/ })).toContainText('5');
+  await expect(page.locator('.card')).toHaveCount(5);
   expect(api.calls.some((c) => c.path === '/animes/sync-episodes')).toBeTruthy();
 });
 
@@ -99,4 +99,43 @@ test('el slug exacto se aprende de "Dónde lo veo" y el dominio se configura', a
   await page.goto('/animes/a1');
   await expect(page.getByRole('link', { name: 'Ver cap. 13 en JKAnime ↗' })).toHaveAttribute('href', 'https://jkanime.org/sousou-no-frieren-tv/13/');
   await expect(page.getByText('El enlace al capítulo se arma con el título en romaji')).toHaveCount(0);
+});
+
+test('agrupar temporadas muestra una tarjeta por serie con el avance total', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.card')).toHaveCount(5);
+  await page.getByLabel('Agrupar temporadas').check();
+  await expect(page.locator('.card')).toHaveCount(4);
+  const solo = page.locator('.card', { hasText: 'Solo Leveling' });
+  await expect(solo).toContainText('1/2 temporadas vistas');
+  await expect(solo).toContainText('T2 · Solo Leveling Season 2');
+  await expect(solo).toContainText('16/25 en total');
+});
+
+test('panel de temporadas: estado por temporada y agregar las que faltan', async ({ page, api }) => {
+  const media = (id: number, title: string, format = 'TV') => ({ anilist_id: id, title, title_romaji: title, title_english: title, total_episodes: 12,
+    aired_episodes: 12, cover_url: null, site_url: 'https://anilist.co', format, year: 2024, season: 'WINTER', airing_status: 'FINISHED', genres: [],
+    score: 80, next_episode_at: null, next_episode: null, mal_id: null, studios: [] });
+  api.on('GET', /^\/catalog\/anime\/30\/seasons$/, () => ({ root: 3, entries: [
+    { media: media(3, 'Solo Leveling'), start: '2024-01-06', season_number: 1, label: 'Temporada 1' },
+    { media: media(30, 'Solo Leveling Season 2'), start: '2025-01-04', season_number: 2, label: 'Temporada 2' },
+    { media: media(31, 'Solo Leveling Season 3'), start: '2026-10-01', season_number: 3, label: 'Temporada 3' },
+    { media: media(32, 'Solo Leveling: ReAwakening', 'MOVIE'), start: '2024-11-29', season_number: null, label: 'Película' },
+  ] }));
+  api.on('POST', /^\/animes\/batch$/, (_r, _u, body) => (body as { items: { anilist_id: number; status: string }[] }).items.map((i, n) =>
+    anime({ id: `new${n}`, anilist_id: i.anilist_id, status: i.status, title: 'Solo Leveling Season 3', watched_episodes: 0, total_episodes: 12 })));
+
+  await page.goto('/animes/a5');
+  const panel = page.locator('section.seasons');
+  await expect(panel).toContainText('3 temporadas · 1 película/extra');
+  await expect(panel.locator('li.current')).toContainText('Temporada 2 · estás aquí');
+  await expect(panel.locator('li', { hasText: 'Temporada 1' })).toContainText('Completado · 12/12');
+  await expect(panel.locator('li', { hasText: 'Película' })).toHaveCount(0); // extras ocultos por defecto
+
+  await panel.getByRole('button', { name: 'Agregar la que falta' }).click();
+  await expect(panel.locator('li', { hasText: 'Temporada 3' })).toContainText('Pendiente · 0/12');
+  expect(api.calls.find((c) => c.path === '/animes/batch')?.body).toEqual({ items: [{ anilist_id: 31, status: 'plan_to_watch' }] });
+
+  await panel.getByRole('button', { name: 'Ver películas y extras' }).click();
+  await expect(panel.locator('li', { hasText: 'Película' })).toContainText('Solo Leveling: ReAwakening');
 });

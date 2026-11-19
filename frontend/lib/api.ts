@@ -33,6 +33,8 @@ export interface Anime {
   aired_episodes: number | null;
   next_episode_at: string | null;
   last_episode_url: string | null;
+  franchise_id: number | null;
+  season_number: number | null;
   completed_at: string | null;
   last_watched_at: string | null;
   created_at: string;
@@ -147,6 +149,9 @@ export interface ImportResult {
   not_found?: string[];
 }
 
+export interface FranchiseEntry { media: CatalogAnime; start: string | null; season_number: number | null; label: string }
+export interface Franchise { root: number; entries: FranchiseEntry[] }
+
 export interface WatchEvent { anime_id: string; episode: number; watched_at: string }
 export interface Discover {
   recommendations: { media: CatalogAnime; because: string[]; rating: number }[];
@@ -242,6 +247,9 @@ export const api = {
     return request<BrowseResult>(`/catalog/browse?${q}`);
   },
   catalogDetails: (anilistId: number) => request<AnimeDetails>(`/catalog/anime/${anilistId}`),
+  catalogSeasons: (anilistId: number) => request<Franchise>(`/catalog/anime/${anilistId}/seasons`),
+  addMany: (items: { anilist_id: number; status: AnimeStatus }[]) =>
+    request<Anime[]>('/animes/batch', { method: 'POST', body: JSON.stringify({ items }) }),
   catalogFilters: () => request<FilterOptions>('/catalog/filters'),
   importAniList: (body: { username: string; statuses?: AniListStatus[]; include_favorites?: boolean }) =>
     request<ImportResult>('/animes/import/anilist', { method: 'POST', body: JSON.stringify(body) }),

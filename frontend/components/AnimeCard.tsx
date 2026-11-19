@@ -116,10 +116,13 @@ export function NextLinks({ anime }: { anime: Anime }) {
   );
 }
 
-/** Tarjeta de la biblioteca. */
-export function AnimeCard({ anime, onChange }: { anime: Anime; onChange: (a: Anime) => void }) {
+export interface SeasonGroup { count: number; completed: number; watched: number; total: number | null }
+
+/** Tarjeta de la biblioteca. Con `group`, representa toda la franquicia (varias temporadas). */
+export function AnimeCard({ anime, onChange, group }: { anime: Anime; onChange: (a: Anime) => void; group?: SeasonGroup }) {
   const color = STATUS_COLORS[anime.status];
   const next = nextEpisodeLabel(anime);
+  const groupPct = group?.total ? Math.min(100, Math.round((group.watched / group.total) * 100)) : 0;
   return (
     <article className="card">
       <div style={{ position: 'relative' }}>
@@ -128,16 +131,27 @@ export function AnimeCard({ anime, onChange }: { anime: Anime; onChange: (a: Ani
             <span className="pill" style={{ '--c': color } as React.CSSProperties}><span className="dot" />{STATUS_LABELS[anime.status]}</span>
             {next && <span className="airing-pill">{next}</span>}
           {anime.score && <span className="score-pill" aria-label={`Tu puntuación: ${anime.score} de 10`}>★ {anime.score}</span>}
+          {group && <span className="group-pill">{group.completed}/{group.count} temporadas vistas</span>}
           </Cover>
         </Link>
         <FavButton anime={anime} onChange={onChange} />
       </div>
       <div className="card-body">
-        <h3 title={anime.title}><Link href={`/animes/${anime.id}`} style={{ color: 'inherit' }}>{anime.title}</Link></h3>
-        <div className="progress-row">
-          <ProgressBar pct={pctOf(anime)} color={color} />
-          <span>{episodesLabel(anime)}</span>
-        </div>
+        <h3 title={anime.title}>
+          {anime.season_number && (anime.season_number > 1 || group) ? <span className="season-tag">T{anime.season_number} · </span> : null}
+          <Link href={`/animes/${anime.id}`} style={{ color: 'inherit' }}>{anime.title}</Link>
+        </h3>
+        {group ? (
+          <div className="progress-row" title="Avance de toda la serie">
+            <ProgressBar pct={groupPct} color={color} />
+            <span>{group.watched}/{group.total ?? '?'} en total</span>
+          </div>
+        ) : (
+          <div className="progress-row">
+            <ProgressBar pct={pctOf(anime)} color={color} />
+            <span>{episodesLabel(anime)}</span>
+          </div>
+        )}
       </div>
     </article>
   );
