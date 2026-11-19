@@ -1,7 +1,7 @@
 import { CONFIG } from './config.js';
 import { getSession } from './lib/auth.js';
 import { api } from './lib/api.js';
-import { detectFromTab, findMatch } from './lib/detect.js';
+import { detectFromJkUrl, detectFromTab, findBySlug, findMatch } from './lib/detect.js';
 
 const ALARM = 'check-episodes';
 const ICON = 'icons/icon128.png';
@@ -67,7 +67,10 @@ async function handleVideoDone(tab) {
   asked.add(url);
 
   const detected = detectFromTab(tab.title ?? '');
-  const anime = findMatch(await cachedList(), detected.title);
+  const jk = detectFromJkUrl(url);
+  if (jk?.episode) detected.episode = jk.episode;
+  const list = await cachedList();
+  const anime = (jk && findBySlug(list, jk.slug)) || findMatch(list, detected.title) || (jk && findMatch(list, jk.title));
   if (!anime) return;
   const episode = detected.episode ?? anime.watched_episodes + 1;
   if (episode <= anime.watched_episodes) return; // ya lo tenías marcado

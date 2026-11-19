@@ -4,7 +4,7 @@ const API = 'http://api.e2e.test/api';
 
 export function anime(over: Record<string, unknown> = {}) {
   return {
-    id: 'a1', title: 'Frieren: Beyond Journey’s End', total_episodes: 28, aired_episodes: 28, watched_episodes: 12,
+    id: 'a1', title: 'Frieren: Beyond Journey’s End', title_romaji: 'Sousou no Frieren', total_episodes: 28, aired_episodes: 28, watched_episodes: 12,
     status: 'watching', is_favorite: true, cover_url: null, source_url: null, notes: null, score: null, review: null,
     anilist_id: 154587, mal_id: 52991, genres: ['Adventure', 'Fantasy'], studios: ['MADHOUSE'], format: 'TV', season_year: 2023,
     airing_status: 'FINISHED', next_episode_at: null, last_episode_url: null, completed_at: null,

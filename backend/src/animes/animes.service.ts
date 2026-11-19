@@ -8,6 +8,7 @@ export interface Anime {
   id: string;
   user_id: string;
   title: string;
+  title_romaji: string | null;
   total_episodes: number | null;
   watched_episodes: number;
   status: AnimeStatus;
@@ -321,7 +322,7 @@ ${entries}
    */
   async syncEpisodes(token: string, opts: { ids?: string[]; force?: boolean } = {}) {
     let query = this.table(token).select(
-      'id, title, anilist_id, total_episodes, watched_episodes, cover_url, airing_status, episodes_synced_at, format',
+      'id, title, title_romaji, anilist_id, total_episodes, watched_episodes, cover_url, airing_status, episodes_synced_at, format',
     );
     if (opts.ids?.length) query = query.in('id', opts.ids);
     const { data, error } = await query;
@@ -331,7 +332,7 @@ ${entries}
     const now = Date.now();
     const stale = (a: Anime) => {
       if (opts.force || !a.episodes_synced_at) return true;
-      if (a.anilist_id && !a.format) return true; // aún sin metadatos (géneros, formato…)
+      if (a.anilist_id && (!a.format || !a.title_romaji)) return true; // aún sin metadatos (géneros, romaji…)
       const age = now - new Date(a.episodes_synced_at).getTime();
       return age > (a.airing_status === 'RELEASING' || a.airing_status === 'NOT_YET_RELEASED' ? 6 : 7 * 24) * 3600_000;
     };
@@ -481,6 +482,7 @@ function metadataFields(m: CatalogAnime) {
     format: m.format,
     season_year: m.year,
     mal_id: m.mal_id,
+    title_romaji: m.title_romaji,
     episodes_synced_at: new Date().toISOString(),
   };
 }

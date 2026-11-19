@@ -321,6 +321,18 @@ label.check input { width: 20px; min-height: 20px; height: 20px; accent-color: v
 .switch:disabled { opacity: .5; cursor: not-allowed; }
 .btn.disabled { opacity: .45; pointer-events: none; }
 
+/* ---------- Ver en JKAnime ---------- */
+.watch-links { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.watch-links a { font-weight: 600; }
+.watch-box { display: flex; flex-direction: column; gap: 10px; }
+.watch-pick { gap: 8px; }
+.watch-pick input { width: 90px; min-height: 44px; }
+.watch-pick span { font-size: .85rem; font-weight: 500; }
+.watch-hint { margin: 0; font-size: .78rem; max-width: 640px; }
+.watch-box.on-dark .watch-pick span, .watch-box.on-dark .watch-hint { color: rgba(249, 245, 235, .85); }
+.watch-box.on-dark .watch-pick input { background: rgba(255, 255, 255, .95); }
+.watch-box.on-light .watch-hint { color: var(--muted); }
+
 /* ---------- Ficha (sinopsis, info, relacionados) ---------- */
 .synopsis { margin: 0; white-space: pre-line; line-height: 1.65; color: var(--text-2); font-size: .98rem; }
 .info-list { margin: 0; display: flex; flex-direction: column; }

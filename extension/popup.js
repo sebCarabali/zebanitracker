@@ -1,7 +1,8 @@
 import { CONFIG } from './config.js';
 import { getSession, signIn, signOut } from './lib/auth.js';
 import { api, AuthError } from './lib/api.js';
-import { detectFromTab, findMatch, guessNextEpisodeUrl } from './lib/detect.js';
+import { detectFromJkUrl, detectFromTab, findBySlug, findMatch, guessNextEpisodeUrl } from './lib/detect.js';
+import { jkEpisodeUrl, jkSearchUrl } from './lib/watch.js';
 
 const $ = (id) => document.getElementById(id);
 const show = (el, visible) => el.classList.toggle('hidden', !visible);
@@ -105,13 +106,15 @@ async function renderApp() {
 
   [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   detected = detectFromTab(tab?.title ?? '');
+  const jk = detectFromJkUrl(tab?.url ?? ''); // en JKAnime la URL trae el anime y el capítulo exactos
+  if (jk?.episode) detected.episode = jk.episode;
 
   try {
     animes = await api.list();
   } catch (e) {
     return handleError(e);
   }
-  matched = findMatch(animes, detected.title);
+  matched = (jk && findBySlug(animes, jk.slug)) || findMatch(animes, detected.title) || (jk && findMatch(animes, jk.title)) || null;
   target = matched ? clampTarget(detected.episode ?? matched.watched_episodes + 1) : 1;
   renderPage();
   renderList();
@@ -142,6 +145,11 @@ function renderPage() {
   const airing = a.airing_status === 'RELEASING' && a.next_episode_at;
   show($('match-airing'), !!airing);
   if (airing) $('match-airing').textContent = `Cap. ${(a.aired_episodes ?? 0) + 1} sale ${relativeTime(a.next_episode_at)}`;
+
+  const nextEp = Math.min(a.watched_episodes + 1, limit ?? Infinity);
+  $('watch-ep').href = jkEpisodeUrl(a, nextEp);
+  $('watch-ep').textContent = `Ver cap. ${nextEp} en JKAnime ↗`;
+  $('watch-search').href = jkSearchUrl(a);
 
   show($('mark-row'), !lastMark);
   show($('done-row'), !!lastMark);
@@ -302,7 +310,9 @@ function renderList() {
     fav.setAttribute('aria-pressed', String(a.is_favorite));
     fav.onclick = () => update(api.toggleFavorite(a.id));
 
-    const nextUrl = guessNextEpisodeUrl(a.last_episode_url, a.watched_episodes);
+    const isJk = /jkanime\./i.test(a.last_episode_url ?? '');
+    const nextUrl = (!isJk && guessNextEpisodeUrl(a.last_episode_url, a.watched_episodes))
+      || (!done ? jkEpisodeUrl(a, a.watched_episodes + 1) : null);
     const open = nextUrl
       ? el('a', { className: 'btn', href: nextUrl, target: '_blank', textContent: '▶', title: `Abrir cap. ${a.watched_episodes + 1}` })
       : null;

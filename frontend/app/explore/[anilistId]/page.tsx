@@ -10,6 +10,7 @@ import {
 import { useAuth } from '@/components/AuthProvider';
 import { Cover } from '@/components/Cover';
 import { BackIcon, CheckIcon, PlayIcon, PlusIcon } from '@/components/Icons';
+import { WatchLinks } from '@/components/WatchLinks';
 
 export default function CatalogDetailPage() {
   const { anilistId } = useParams<{ anilistId: string }>();
@@ -99,6 +100,9 @@ export default function CatalogDetailPage() {
                 {anime.trailer_url && <a href={anime.trailer_url} target="_blank" rel="noreferrer" className="btn glass lg">Tráiler ↗</a>}
                 <a href={anime.site_url} target="_blank" rel="noreferrer" className="btn glass lg">AniList ↗</a>
               </div>
+              <WatchLinks variant="hero" max={eps}
+                anime={{ title: anime.title, title_romaji: anime.title_romaji, source_url: mine?.source_url, last_episode_url: mine?.last_episode_url }}
+                episode={Math.min((mine?.watched_episodes ?? 0) + 1, eps ?? Infinity)} />
               {error && <p className="error small" style={{ margin: 0 }}>{error}</p>}
             </div>
           </div>

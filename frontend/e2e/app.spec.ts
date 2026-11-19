@@ -75,3 +75,28 @@ test('lista pública se ve sin sesión', async ({ browser }) => {
   await expect(page.getByRole('link', { name: 'Crea tu lista' })).toBeVisible();
   await expect(page.locator('.card')).toContainText('Frieren');
 });
+
+test('enlaces a JKAnime: capítulo siguiente, búsqueda y "ir al capítulo"', async ({ page, context }) => {
+  await page.goto('/');
+  const card = page.locator('.continue', { hasText: 'Frieren' });
+  await expect(card.getByRole('link', { name: 'Ver cap. 13 en JKAnime ↗' })).toHaveAttribute('href', 'https://jkanime.net/sousou-no-frieren/13/');
+  await expect(card.getByRole('link', { name: 'Buscar' })).toHaveAttribute('href', 'https://jkanime.net/buscar/Sousou%20no%20Frieren/');
+
+  const opened: string[] = [];
+  await context.route('https://jkanime.net/**', (r) => { opened.push(r.request().url()); return r.fulfill({ body: 'ok' }); });
+  await page.goto('/animes/a1');
+  await page.getByLabel('Número de capítulo').fill('20');
+  const [popup] = await Promise.all([context.waitForEvent('page'), page.getByRole('button', { name: 'Abrir ↗' }).click()]);
+  await popup.waitForLoadState();
+  expect(opened).toContain('https://jkanime.net/sousou-no-frieren/20/');
+});
+
+test('el slug exacto se aprende de "Dónde lo veo" y el dominio se configura', async ({ page, api }) => {
+  api.on('GET', /^\/animes\/a1$/, () => anime({ source_url: 'https://jkanime.net/sousou-no-frieren-tv/' }));
+  await page.goto('/settings');
+  await page.getByLabel(/Dominio de JKAnime/).fill('https://jkanime.org');
+  await page.locator('form', { hasText: 'Dominio de JKAnime' }).getByRole('button', { name: 'Guardar' }).click();
+  await page.goto('/animes/a1');
+  await expect(page.getByRole('link', { name: 'Ver cap. 13 en JKAnime ↗' })).toHaveAttribute('href', 'https://jkanime.org/sousou-no-frieren-tv/13/');
+  await expect(page.getByText('El enlace al capítulo se arma con el título en romaji')).toHaveCount(0);
+});

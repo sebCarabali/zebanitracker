@@ -20,18 +20,40 @@ export function detectFromTab(tabTitle = '') {
 
 const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 
-/** Busca en la lista un anime cuyo título coincida con el detectado. */
+/** Busca en la lista un anime cuyo título (o romaji) coincida con el detectado. */
 export function findMatch(animes, title) {
   const t = norm(title);
   if (t.length < 3) return null;
+  const names = (a) => [a.title, a.title_romaji].filter(Boolean).map(norm);
   return (
-    animes.find((a) => norm(a.title) === t) ??
-    animes.find((a) => {
-      const n = norm(a.title);
-      return n.length >= 3 && (n.includes(t) || t.includes(n));
-    }) ??
+    animes.find((a) => names(a).includes(t)) ??
+    animes.find((a) => names(a).some((n) => n.length >= 3 && (n.includes(t) || t.includes(n)))) ??
     null
   );
+}
+
+/** En JKAnime la URL dice el anime y el capítulo: /sousou-no-frieren/12/ */
+export function detectFromJkUrl(url) {
+  try {
+    const u = new URL(url);
+    if (!/(^|\.)jkanime\./i.test(u.hostname)) return null;
+    const [slug, ep] = u.pathname.split('/').filter(Boolean);
+    if (!slug || ['buscar', 'directorio', 'horario', 'genero', 'letra', 'top'].includes(slug)) return null;
+    return { slug, episode: /^\d+$/.test(ep ?? '') ? Number(ep) : null, title: slug.replace(/-/g, ' ') };
+  } catch {
+    return null;
+  }
+}
+
+/** Anime de la lista cuyo slug de JKAnime (aprendido o derivado del romaji) coincide. */
+export function findBySlug(animes, slug) {
+  return animes.find((a) => [a.source_url, a.last_episode_url].some((u) => detectFromJkUrl(u ?? '')?.slug === slug))
+    ?? animes.find((a) => slugify(a.title_romaji || a.title) === slug)
+    ?? null;
+}
+
+export function slugify(title) {
+  return title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 /** Intenta adivinar la URL del siguiente capítulo incrementando el último número de la ruta. */

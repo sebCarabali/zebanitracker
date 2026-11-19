@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { Anime, api, guessNextEpisodeUrl, knownEpisodes, relativeTime, STATUS_COLORS, STATUS_LABELS } from '@/lib/api';
 import { Cover } from './Cover';
 import { StarIcon } from './Icons';
+import { WatchLinks } from './WatchLinks';
+import { isJkUrl } from '@/lib/watch';
 
 export function pctOf(a: Anime) {
   const total = knownEpisodes(a);
@@ -93,6 +95,7 @@ export function ContinueCard({ anime, onChange }: { anime: Anime; onChange: (a: 
             {done ? (anime.airing_status === 'RELEASING' ? 'Al día' : 'Terminado') : `Visto cap. ${anime.watched_episodes + 1}`}
           </button>
         </div>
+        {!done && <WatchLinks anime={anime} episode={anime.watched_episodes + 1} />}
         <NextLinks anime={anime} />
         {error && <span className="error small">{error}</span>}
       </div>
@@ -102,7 +105,7 @@ export function ContinueCard({ anime, onChange }: { anime: Anime; onChange: (a: 
 
 /** "Abrir siguiente" (URL adivinada) o "Volver a donde lo dejaste" si se guardó la página del capítulo. */
 export function NextLinks({ anime }: { anime: Anime }) {
-  if (!anime.last_episode_url) return null;
+  if (!anime.last_episode_url || isJkUrl(anime.last_episode_url)) return null; // JKAnime ya tiene su propio enlace
   const next = guessNextEpisodeUrl(anime.last_episode_url, anime.watched_episodes);
   return (
     <div className="next-links small">

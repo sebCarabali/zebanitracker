@@ -103,3 +103,7 @@ input:focus, select:focus { outline: 2px solid var(--accent-strong); outline-off
 #list .fav { width: 32px; height: 40px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 16px; }
 #list .fav.on { color: var(--fav); }
 #list .empty { padding: 16px 8px; text-align: center; }
+
+.watch-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.watch-row .btn { display: inline-flex; align-items: center; min-height: 40px; font-size: 13px; text-decoration: none; background: var(--navy); border-color: var(--navy); color: var(--cream); }
+.watch-row .link { align-self: center; }

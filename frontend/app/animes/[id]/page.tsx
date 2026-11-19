@@ -8,6 +8,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { Cover } from '@/components/Cover';
 import { BackIcon, PlayIcon, RefreshIcon, StarIcon } from '@/components/Icons';
 import { NextLinks } from '@/components/AnimeCard';
+import { WatchLinks } from '@/components/WatchLinks';
 import { Stars } from '@/components/Stars';
 
 const RING_R = 56;
@@ -135,7 +136,7 @@ export default function AnimeDetailPage() {
                   <StarIcon filled={anime.is_favorite} size={18} />
                   <span style={{ color: 'var(--cream)' }}>{anime.is_favorite ? 'Favorito' : 'Agregar a favoritos'}</span>
                 </button>
-                {anime.source_url && (
+                {anime.source_url && !anime.source_url.includes('jkanime.') && (
                   <a href={anime.source_url} target="_blank" rel="noreferrer" className="btn lg glass">Ver ↗</a>
                 )}
                 {anime.anilist_id && (
@@ -145,9 +146,11 @@ export default function AnimeDetailPage() {
                   </button>
                 )}
               </div>
+              <WatchLinks anime={anime} variant="hero" max={total ?? aired}
+                episode={Math.min(anime.watched_episodes + 1, total ?? aired ?? anime.watched_episodes + 1)} />
             </div>
 
-            <div className="ring-box">
+            <div className="ring-box" style={{ order: 3 }}>
               <div className="ring">
                 <svg width="132" height="132" viewBox="0 0 132 132" role="img" aria-label={pct !== null ? `Progreso ${pct}%` : 'Progreso'}>
                   <circle cx="66" cy="66" r={RING_R} fill="none" stroke="rgba(249, 245, 235, .18)" strokeWidth="12" />
@@ -265,7 +268,8 @@ export default function AnimeDetailPage() {
                 onChange={(e) => setForm({ ...form, total: e.target.value })} />
             </label>
             <label>Dónde lo veo
-              <input type="url" placeholder="https://…" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} />
+              <span className="muted small" style={{ fontWeight: 400 }}>Pega la página del anime en JKAnime para que “Ver cap.” abra el enlace exacto.</span>
+              <input type="url" placeholder="https://jkanime.net/nombre-del-anime/" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} />
             </label>
             <label>Notas
               <textarea rows={4} maxLength={5000} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

@@ -6,4 +6,6 @@ export const CONFIG = {
   SUPABASE_ANON_KEY: 'sb_publishable_CiaWpjryQqhtsSnLbUFv6A_mR00Ozgh',
   API_URL: 'https://zebanitracker-api.vercel.app/api',
   WEB_URL: 'https://zebanitracker-web.vercel.app',
+  // Sitio para "Ver cap. N". Cambia el dominio si JKAnime se muda (p. ej. https://jkanime.org).
+  WATCH_BASE: 'https://jkanime.net',
 };

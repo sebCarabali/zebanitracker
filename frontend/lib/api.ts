@@ -13,6 +13,7 @@ export const STATUS_LABELS: Record<AnimeStatus, string> = {
 export interface Anime {
   id: string;
   title: string;
+  title_romaji: string | null;
   total_episodes: number | null;
   watched_episodes: number;
   status: AnimeStatus;

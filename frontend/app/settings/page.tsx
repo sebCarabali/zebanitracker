@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api, Profile } from '@/lib/api';
 import { useAuth } from '@/components/AuthProvider';
+import { DEFAULT_WATCH_BASE, getWatchBase, setWatchBase } from '@/lib/watch';
 
 const ANILIST_CLIENT_ID = process.env.NEXT_PUBLIC_ANILIST_CLIENT_ID;
 
@@ -18,6 +19,8 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [watchBase, setWatchBaseState] = useState(DEFAULT_WATCH_BASE);
+  useEffect(() => setWatchBaseState(getWatchBase()), []);
 
   useEffect(() => {
     if (!session) return;
@@ -140,6 +143,30 @@ export default function SettingsPage() {
               </a>
             )}
           </div>
+        </section>
+
+        <section className="panel">
+          <h2 className="section-label">Dónde ver</h2>
+          <form className="setting" onSubmit={(e) => {
+            e.preventDefault();
+            setWatchBase(watchBase);
+            setWatchBaseState(getWatchBase());
+            setMsg({ type: 'ok', text: `Los enlaces de “Ver en JKAnime” usarán ${getWatchBase()}` });
+          }}>
+            <label className="grow" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <strong>Dominio de JKAnime</strong>
+              <span className="muted small">Cambia si el sitio se muda (por ejemplo a jkanime.org). Se guarda en este navegador.</span>
+              <input type="url" required value={watchBase} onChange={(e) => setWatchBaseState(e.target.value)} placeholder={DEFAULT_WATCH_BASE} />
+            </label>
+            <div className="row">
+              <button className="btn navy">Guardar</button>
+              {watchBase !== DEFAULT_WATCH_BASE && (
+                <button type="button" className="btn ghost" onClick={() => { setWatchBase(DEFAULT_WATCH_BASE); setWatchBaseState(DEFAULT_WATCH_BASE); }}>
+                  Restablecer
+                </button>
+              )}
+            </div>
+          </form>
         </section>
 
         <section className="panel">

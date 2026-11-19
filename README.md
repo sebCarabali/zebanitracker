@@ -19,6 +19,7 @@ zebanitracker/
 - Reglas automáticas: llegar al último capítulo → *Completado*; marcar *Completado* rellena el progreso; no se puede superar el total.
 - **Calendario** (`/calendar`): estrenos de los próximos 7 días y capítulos ya emitidos que aún no ves.
 - **Puntuación (1-10) y reseña** por anime; orden de la biblioteca por recientes, título, progreso, puntuación o próximo estreno.
+- **Ver en JKAnime**: botones "Ver cap. N en JKAnime" y "Buscar en JKAnime", y selector "Ir al capítulo" en el detalle. El enlace usa el slug del anime (`{dominio}/{slug}/{n}/`): se aprende de la página pegada en *Dónde lo veo* o desde la que marcaste un capítulo; si no hay, se deriva del título en romaji. El dominio se cambia en Ajustes (web) y en `extension/config.js` → `WATCH_BASE`. La extensión reconoce anime y capítulo directamente de la URL de JKAnime.
 - **Continuar con un clic**: al marcar desde la extensión se guarda la página del capítulo y se ofrece "Abrir cap. N+1" (adivina la URL).
 - **Historial**: cada capítulo marcado queda registrado (`watch_events`) → racha diaria y mapa de actividad.
 - **Descubrir**: "Para ti" (recomendaciones de AniList según tus favoritos y mejor puntuados) y **secuelas pendientes** de lo que terminaste; acceso rápido a los estrenos de la temporada.
