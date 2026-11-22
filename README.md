@@ -19,7 +19,7 @@ zebanitracker/
 - Reglas automáticas: llegar al último capítulo → *Completado*; marcar *Completado* rellena el progreso; no se puede superar el total.
 - **Calendario** (`/calendar`): estrenos de los próximos 7 días y capítulos ya emitidos que aún no ves.
 - **Puntuación (1-10) y reseña** por anime; orden de la biblioteca por recientes, título, progreso, puntuación o próximo estreno.
-- **IA** con **Groq** (`GROQ_API_KEY` en `zebanitracker-api`; modelo por defecto `llama-3.3-70b-versatile` con respaldo automático si Groq lo retira; se puede fijar con `AI_MODEL`). Sin clave de Groq usa Vercel AI Gateway:
+- **IA** con **Groq** (`GROQ_API_KEY` en `zebanitracker-api`; modelo por defecto `openai/gpt-oss-120b` con respaldo automático si Groq lo retira; se puede fijar con `AI_MODEL`). Sin clave de Groq usa Vercel AI Gateway:
   - **Recomendado por IA** en Mi lista: usa tu historial, puntuaciones, favoritos, abandonos y los gustos que escribas en Ajustes. La IA solo elige entre candidatos reales de AniList (recomendaciones de la comunidad, mejor valorados en tus géneros y la temporada actual) y explica por qué cada uno encaja contigo. También acepta pedidos puntuales ("algo corto de misterio").
   - **Sinopsis traducidas** al idioma de tu perfil (por defecto español), con opción de ver el original. Se guardan para no traducir dos veces.
   - La respuesta JSON se valida en el servidor (no depende del modo de salida estructurada del modelo). Límites por usuario: 15 recomendaciones y 150 traducciones al día. `/api/health/ai` muestra el modelo en uso y los modelos disponibles en la cuenta de Groq.

@@ -20,7 +20,7 @@ export interface Candidate {
 }
 
 /** Modelos de Groq a probar en orden si AI_MODEL no está definido (si uno se retira, se usa el siguiente). */
-const GROQ_MODELS = ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'moonshotai/kimi-k2-instruct', 'llama-3.1-8b-instant'];
+const GROQ_MODELS = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile'];
 
 /**
  * IA con Groq (GROQ_API_KEY). Si no hay clave de Groq, usa Vercel AI Gateway
