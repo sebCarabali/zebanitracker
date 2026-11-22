@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, LANGUAGES } from '@/lib/api';
+import { readTranslation, writeTranslation } from '@/lib/translation-cache';
 
 /**
  * Sinopsis traducida con IA al idioma del usuario (por defecto español), con opción de ver el original.
@@ -18,14 +19,24 @@ export function Synopsis({ anilistId, original, clamp = 0 }: { anilistId: number
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     setFailed(false);
+    // 1. Caché del navegador: instantáneo y sin pedir nada al servidor
+    const cached = readTranslation(anilistId, original);
+    if (cached) {
+      setText(cached.text); setLang(cached.lang); setTranslated(true); setLoading(false);
+      return;
+    }
+    setLoading(true);
     api.aiDescription(anilistId)
-      .then((r) => { if (!cancelled) { setText(r.text); setLang(r.lang); setTranslated(r.translated); } })
+      .then((r) => {
+        if (cancelled) return;
+        setText(r.text); setLang(r.lang); setTranslated(r.translated);
+        if (r.translated && r.text) writeTranslation(anilistId, original, r.lang, r.text);
+      })
       .catch(() => !cancelled && setFailed(true))
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [anilistId]);
+  }, [anilistId, original]);
 
   const shown = showOriginal || failed || !text ? original : text;
   const long = clamp > 0 && shown.length > clamp;

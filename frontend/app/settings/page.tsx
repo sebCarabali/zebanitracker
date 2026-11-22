@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { api, LANGUAGES, Profile } from '@/lib/api';
 import { useAuth } from '@/components/AuthProvider';
 import { DEFAULT_WATCH_BASE, getWatchBase, setWatchBase } from '@/lib/watch';
+import { clearTranslations } from '@/lib/translation-cache';
 
 const ANILIST_CLIENT_ID = process.env.NEXT_PUBLIC_ANILIST_CLIENT_ID;
 
@@ -77,7 +78,7 @@ export default function SettingsPage() {
               <strong>Idioma de las sinopsis y recomendaciones</strong>
               <span className="muted small">Las sinopsis de AniList (en inglés) se traducen con IA a este idioma.</span>
               <select value={profile.language} disabled={busy}
-                onChange={(e) => save({ language: e.target.value }, `Idioma: ${LANGUAGES[e.target.value]}`)}>
+                onChange={(e) => { clearTranslations(); save({ language: e.target.value }, `Idioma: ${LANGUAGES[e.target.value]}`); }}>
                 {Object.entries(LANGUAGES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </label>

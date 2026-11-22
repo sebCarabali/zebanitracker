@@ -188,3 +188,16 @@ test('si la IA responde vacío o incompleto, Mi lista no se rompe', async ({ pag
   await expect(page.locator('section.ai-section')).toContainText('Pulsa “Otras recomendaciones”');
   expect(errors).toEqual([]);
 });
+
+test('la sinopsis traducida se guarda en el navegador y no se vuelve a pedir', async ({ page, api }) => {
+  api.on('GET', /^\/catalog\/anime\/154587$/, () => ({ anilist_id: 154587, title: 'Frieren', title_romaji: 'Sousou no Frieren', title_english: 'Frieren',
+    total_episodes: 28, aired_episodes: 28, cover_url: null, cover_large_url: null, banner_url: null, site_url: 'https://anilist.co', format: 'TV', year: 2023,
+    season: 'FALL', airing_status: 'FINISHED', next_episode_at: null, next_episode: null, genres: [], score: 90, description: 'The adventure is over.',
+    duration: 24, studios: [], source: 'MANGA', start_date: null, end_date: null, popularity: 1, tags: [], trailer_url: null, relations: [], mal_id: null }));
+  api.on('GET', /^\/ai\/description\/154587$/, () => ({ lang: 'es', text: 'La aventura terminó.', original: 'The adventure is over.', translated: true }));
+  await page.goto('/explore/154587');
+  await expect(page.locator('.synopsis')).toHaveText('La aventura terminó.');
+  await page.reload();
+  await expect(page.locator('.synopsis')).toHaveText('La aventura terminó.');
+  expect(api.calls.filter((c) => c.path === '/ai/description/154587')).toHaveLength(1);
+});

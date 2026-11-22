@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Headers, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 import { SupabaseAuthGuard } from '../auth/auth.guard.js';
 import { AccessToken, UserId } from '../auth/current-user.decorator.js';
@@ -6,6 +6,7 @@ import { SupabaseService } from '../supabase/supabase.service.js';
 import { AniListService, CatalogAnime } from '../anilist/anilist.service.js';
 import { Anime, AnimesService } from '../animes/animes.service.js';
 import { AiService, Candidate, LANGUAGES } from './ai.service.js';
+import { TranslationCacheService } from './translation-cache.service.js';
 
 class RecommendDto {
   /** Pedido puntual: "algo corto de misterio", "para ver con mi hermana"… */
@@ -34,6 +35,7 @@ export class AiController {
     private readonly supabase: SupabaseService,
     private readonly anilist: AniListService,
     private readonly animes: AnimesService,
+    private readonly translations: TranslationCacheService,
   ) {}
 
   private async profile(token: string) {
@@ -47,8 +49,12 @@ export class AiController {
   // Traducción de sinopsis
   // -------------------------------------------------------------------------------------------
 
-  /** Sinopsis traducida al idioma pedido (o al de tu perfil; español por defecto). Se guarda en caché. */
+  /**
+   * Sinopsis traducida al idioma pedido (o al de tu perfil; español por defecto).
+   * Caché: memoria → tabla compartida → IA (una sola vez por anime e idioma para todos los usuarios).
+   */
   @Get('description/:anilistId')
+  @Header('Cache-Control', 'private, max-age=86400')
   async description(
     @AccessToken() token: string,
     @UserId() userId: string,
@@ -62,14 +68,13 @@ export class AiController {
     if (!original) return { lang, text: null, original: null, translated: false };
     if (lang === 'en') return { lang, text: original, original, translated: false }; // AniList ya está en inglés
 
-    const db = this.supabase.forUser(token).from('ai_translations');
-    const { data: hit } = await db.select('text').eq('anilist_id', anilistId).eq('lang', lang).maybeSingle();
-    if (hit) return { lang, text: (hit as { text: string }).text, original, translated: true, cached: true };
-
-    this.ai.limit(userId, 'translate', 150);
-    const text = await this.ai.translate(oidc, original, lang);
-    await db.upsert({ user_id: userId, anilist_id: anilistId, lang, text });
-    return { lang, text, original, translated: true, cached: false };
+    const { text, cache } = await this.translations.get({
+      anilistId, lang, original, userToken: token, userId,
+      model: () => this.ai.modelId,
+      translate: () => this.ai.translate(oidc, original, lang),
+      beforeTranslate: () => this.ai.limit(userId, 'translate', 150),
+    });
+    return { lang, text, original, translated: true, cache };
   }
 
   // -------------------------------------------------------------------------------------------
