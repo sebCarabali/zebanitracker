@@ -20,7 +20,7 @@ export class HealthController {
       const text = await this.ai.translate(oidc, 'The adventure is over but life goes on for an elf mage.', 'es');
       return { ok: true, model: this.ai.modelId, ms: Date.now() - started, sample: text, auth: process.env.AI_GATEWAY_API_KEY ? 'api-key' : oidc ? 'oidc' : 'none' };
     } catch (e) {
-      return { ok: false, model: this.ai.modelId, error: (e as Error).message, auth: process.env.AI_GATEWAY_API_KEY ? 'api-key' : oidc ? 'oidc' : 'none' };
+      return { ok: false, model: this.ai.modelId, error: (e as Error).message, detail: 'Ver logs: AI Gateway', auth: process.env.AI_GATEWAY_API_KEY ? 'api-key' : oidc ? 'oidc' : 'none' };
     }
   }
 

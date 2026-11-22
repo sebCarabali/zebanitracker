@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { BadGatewayException, HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { createGateway } from '@ai-sdk/gateway';
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
@@ -34,6 +34,17 @@ export class AiService {
     return createGateway({ apiKey })(this.modelId);
   }
 
+  /** Traduce errores del gateway a mensajes claros para el usuario. */
+  private friendly(e: unknown): never {
+    const msg = (e as Error)?.message ?? '';
+    this.logger.warn(`AI Gateway: ${msg}`);
+    if (e instanceof HttpException) throw e;
+    if (/credit card|free credits|insufficient|quota|balance/i.test(msg)) {
+      throw new ServiceUnavailableException('La IA aún no está activada en el servidor. Vuelve a intentarlo más tarde.');
+    }
+    throw new BadGatewayException('La IA no respondió. Intenta de nuevo en un momento.');
+  }
+
   /** Límite simple por usuario y acción (por instancia del servidor) para cuidar el crédito. */
   limit(userId: string, action: string, perDay: number) {
     const key = `${userId}:${action}`;
@@ -58,7 +69,7 @@ export class AiService {
         'Si aparece una nota de fuente como "(Source: X)", tradúcela como "(Fuente: X)" en el idioma destino. ' +
         'Responde solo con la traducción, sin comentarios ni comillas.',
       prompt: text,
-    });
+    }).catch((e) => this.friendly(e));
     return out.trim();
   }
 
@@ -101,7 +112,7 @@ export class AiService {
         (args.request ? `LO QUE PIDE AHORA: ${args.request}\n\n` : '') +
         `CANDIDATOS (id | título | año | formato | capítulos | géneros | puntuación AniList | origen)\n${lines.join('\n')}\n\n` +
         `Elige ${args.count} candidatos, del más recomendado al menos.`,
-    });
+    }).catch((e) => this.friendly(e));
 
     const seen = new Set<number>();
     const picks = (output?.picks ?? []).filter((p) => ids.has(p.anilist_id) && !seen.has(p.anilist_id) && seen.add(p.anilist_id));
