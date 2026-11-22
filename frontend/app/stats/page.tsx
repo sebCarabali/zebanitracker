@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, Anime, FORMAT_LABELS, MINUTES_PER_EPISODE, STATUS_COLORS, STATUS_LABELS, WatchEvent, AnimeStatus } from '@/lib/api';
 import { useAuth } from '@/components/AuthProvider';
 import { dayKey, perDay, streaks } from '@/lib/activity';
+import { MonthlySummary } from '@/components/MonthlySummary';
+import { ShareCard } from '@/components/ShareCard';
+import { SafeBoundary } from '@/components/SafeBoundary';
 
 function Bars({ rows, unit }: { rows: { label: string; value: number; color?: string }[]; unit: (v: number) => string }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
@@ -29,9 +32,16 @@ export default function StatsPage() {
   const [events, setEvents] = useState<WatchEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
+  const [rewatches, setRewatches] = useState(0);
+  const [initialMonth, setInitialMonth] = useState<string | undefined>();
+
+  useEffect(() => { try { setInitialMonth(new URLSearchParams(window.location.search).get('month') ?? undefined); } catch {} }, []);
 
   useEffect(() => {
     if (!session) return;
+    api.profile().then((p) => setUsername(p.username)).catch(() => {});
+    api.rewatches().then((r) => setRewatches(Array.isArray(r) ? r.length : 0)).catch(() => {});
     Promise.all([api.list(), api.activity(365)])
       .then(([a, e]) => { setAnimes(a); setEvents(e); })
       .catch((e) => setError(e.message))
@@ -39,7 +49,10 @@ export default function StatsPage() {
   }, [session]);
 
   const s = useMemo(() => {
-    const episodes = animes.reduce((n, a) => n + a.watched_episodes, 0);
+    const animeOnly = animes.filter((a) => (a.media_type ?? 'anime') === 'anime');
+    const episodes = animeOnly.reduce((n, a) => n + a.watched_episodes, 0);
+    const minutes = animeOnly.reduce((n, a) => n + a.watched_episodes * (a.duration ?? MINUTES_PER_EPISODE), 0);
+    const bookChapters = animes.filter((a) => a.media_type && a.media_type !== 'anime').reduce((n, a) => n + a.watched_episodes, 0);
     const byGenre = new Map<string, number>();
     const byStudio = new Map<string, number>();
     const byYear = new Map<number, number>();
@@ -59,7 +72,10 @@ export default function StatsPage() {
     const top = (m: Map<string, number>, n: number) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
     return {
       episodes,
-      hours: hours(episodes),
+      bookChapters,
+      hours: Math.round(minutes / 60),
+      top10: [...animes].filter((a) => a.score || a.is_favorite)
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || Number(b.is_favorite) - Number(a.is_favorite)).slice(0, 10),
       completed: statusCount.get('completed') ?? 0,
       dropRate: finishedOrDropped ? Math.round(((statusCount.get('dropped') ?? 0) / finishedOrDropped) * 100) : 0,
       avgScore: scored.length ? (scored.reduce((n, a) => n + a.score!, 0) / scored.length).toFixed(1) : '–',
@@ -99,7 +115,7 @@ export default function StatsPage() {
       <div>
         <span className="eyebrow">Estadísticas</span>
         <h1 style={{ marginTop: 8 }}>Tu año en anime</h1>
-        <p className="muted" style={{ marginBottom: 0 }}>Horas estimadas con {MINUTES_PER_EPISODE} minutos por capítulo.</p>
+        <p className="muted" style={{ marginBottom: 0 }}>Horas según la duración de cada capítulo en AniList ({MINUTES_PER_EPISODE} min si no se conoce).</p>
       </div>
       {error && <p className="error">{error}</p>}
       {loading ? <p className="muted">Cargando…</p> : (
@@ -108,9 +124,43 @@ export default function StatsPage() {
             {[
               [s.hours + ' h', 'Horas vistas'], [s.episodes, 'Capítulos'], [s.completed, 'Terminados'],
               [`${current} ${current === 1 ? 'día' : 'días'}`, 'Racha actual'], [`${longest} ${longest === 1 ? 'día' : 'días'}`, 'Racha más larga'], [thisMonth, 'Capítulos este mes'],
-              [s.avgScore, 'Puntuación media'], [s.dropRate + '%', 'Tasa de abandono'],
+              [s.avgScore, 'Puntuación media'], [s.dropRate + '%', 'Tasa de abandono'], [rewatches, 'Rewatches'],
+              ...(s.bookChapters ? [[s.bookChapters, 'Caps. de manga/novela']] : []),
             ].map(([v, l]) => <div key={String(l)} className="stat"><strong>{v}</strong><span>{l}</span></div>)}
           </div>
+
+          <SafeBoundary name="resumen del mes"><MonthlySummary username={username} initialMonth={initialMonth} /></SafeBoundary>
+
+          {s.top10.length > 0 && (
+            <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="section-head" style={{ marginBottom: 0 }}>
+                <h2 className="section-label" style={{ margin: 0 }}>Tu top {s.top10.length}</h2>
+                <span className="muted small">Según tu puntuación</span>
+              </div>
+              <ol className="top-list">
+                {s.top10.map((a) => <li key={a.id}><span>{a.title}</span><span className="muted">{a.score ? `${a.score}/10` : '★'}</span></li>)}
+              </ol>
+              <div className="row">
+                <ShareCard filename="zebanitracker-top10.png" label="Compartir mi top 10"
+                  payload={() => ({
+                    kind: 'top', name: username ?? undefined, title: `Mi top ${s.top10.length} de anime`,
+                    subtitle: `${s.hours} h vistas · ${s.completed} terminados`,
+                    items: s.top10.map((a) => ({ title: a.title, cover_url: a.cover_url, score: a.score })),
+                  })} />
+                <ShareCard filename="zebanitracker-stats.png" label="Compartir mis estadísticas"
+                  payload={() => ({
+                    kind: 'stats', name: username ?? undefined, title: 'Mis estadísticas de anime',
+                    subtitle: `Puntuación media ${s.avgScore}`,
+                    numbers: [
+                      { value: `${s.hours} h`, label: 'vistas' }, { value: String(s.episodes), label: 'capítulos' },
+                      { value: String(s.completed), label: 'terminados' }, { value: `${longest}`, label: 'días de racha máx.' },
+                      { value: String(rewatches), label: 'rewatches' }, { value: `${s.dropRate}%`, label: 'abandono' },
+                    ],
+                    highlights: s.genres.slice(0, 3).map((g) => `${g.label}: ${hours(g.value)} h`),
+                  })} />
+              </div>
+            </section>
+          )}
 
           <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <h2 className="section-label">Actividad del último año</h2>

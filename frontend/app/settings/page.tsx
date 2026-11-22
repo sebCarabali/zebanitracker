@@ -137,8 +137,23 @@ export default function SettingsPage() {
           </div>
           <div className="setting">
             <div className="grow">
+              <strong>¿Lo retomas o lo dejas?</strong>
+              <p className="muted small">
+                Te preguntamos por las series en “Viendo” que no avanzas hace tiempo (en tu lista, en la extensión y,
+                si activaste los correos, por email). Con los correos también recibes el resumen del mes el día 1.
+              </p>
+            </div>
+            <label className="row small">Después de
+              <select value={profile.stale_weeks} disabled={busy}
+                onChange={(e) => save({ stale_weeks: Number(e.target.value) }, `Te preguntaremos tras ${e.target.value} semanas sin avanzar`)}>
+                {[1, 2, 3, 4, 6, 8, 12].map((w) => <option key={w} value={w}>{w} {w === 1 ? 'semana' : 'semanas'}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="setting">
+            <div className="grow">
               <strong>Avisos en el navegador</strong>
-              <p className="muted small">La extensión de Chrome muestra una notificación cuando sale un capítulo nuevo.</p>
+              <p className="muted small">La extensión de Chrome avisa cuando sale un capítulo nuevo, marca solo lo que terminas de ver y te recuerda las series pausadas.</p>
             </div>
           </div>
         </section>

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ZebaniTracker",
-  "version": "1.5.0",
-  "description": "Agrega animes y marca capítulos vistos en tu ZebaniTracker.",
+  "version": "1.6.0",
+  "description": "Reconoce el anime y el capítulo que ves, lo marca solo al terminar y te propone agregarlo a tu ZebaniTracker.",
   "action": {
     "default_popup": "popup.html",
     "default_title": "ZebaniTracker",

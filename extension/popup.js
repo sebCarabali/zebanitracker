@@ -1,7 +1,8 @@
 import { CONFIG } from './config.js';
 import { getSession, signIn, signOut } from './lib/auth.js';
 import { api, AuthError } from './lib/api.js';
-import { detectFromJkUrl, detectFromTab, findBySlug, findMatch, guessNextEpisodeUrl } from './lib/detect.js';
+import { detectPage, guessNextEpisodeUrl, matchPage } from './lib/detect.js';
+import { getSettings, setSetting } from './lib/settings.js';
 import { jkEpisodeUrl, jkSearchUrl } from './lib/watch.js';
 
 const $ = (id) => document.getElementById(id);
@@ -105,16 +106,16 @@ async function renderApp() {
   $('user').textContent = session.email ?? '';
 
   [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  detected = detectFromTab(tab?.title ?? '');
-  const jk = detectFromJkUrl(tab?.url ?? ''); // en JKAnime la URL trae el anime y el capítulo exactos
-  if (jk?.episode) detected.episode = jk.episode;
+  // Título de la pestaña + URL de sitios conocidos (JKAnime, AnimeFLV, MonosChinos, HiAnime…)
+  detected = detectPage(tab?.url ?? '', tab?.title ?? '');
 
   try {
     animes = await api.list();
   } catch (e) {
     return handleError(e);
   }
-  matched = (jk && findBySlug(animes, jk.slug)) || findMatch(animes, detected.title) || (jk && findMatch(animes, jk.title)) || null;
+  matched = matchPage(animes, detected);
+  renderSettings();
   target = matched ? clampTarget(detected.episode ?? matched.watched_episodes + 1) : 1;
   renderPage();
   renderList();
@@ -354,3 +355,14 @@ async function update(promise) {
 $('search').addEventListener('input', renderList);
 
 renderApp();
+
+/* ---------- Ajustes ---------- */
+async function renderSettings() {
+  const s = await getSettings();
+  for (const key of ['autoMark', 'suggestAdd', 'staleReminders']) {
+    const input = document.querySelector(`[data-setting="${key}"]`);
+    if (!input) continue;
+    input.checked = !!s[key];
+    input.onchange = () => setSetting(key, input.checked).then(() => msg('Ajuste guardado'));
+  }
+}

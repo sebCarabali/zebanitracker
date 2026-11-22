@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { api, CatalogAnime, FORMAT_LABELS } from '@/lib/api';
+import { api, CatalogAnime, FORMAT_LABELS, MediaType } from '@/lib/api';
 
 /** Buscador con autocompletado contra el catálogo de AniList. */
-export function CatalogSearch({ onSelect }: { onSelect: (a: CatalogAnime) => void }) {
+export function CatalogSearch({ onSelect, media = 'anime' }: { onSelect: (a: CatalogAnime) => void; media?: MediaType }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<CatalogAnime[]>([]);
   const [loading, setLoading] = useState(false);
@@ -20,7 +20,7 @@ export function CatalogSearch({ onSelect }: { onSelect: (a: CatalogAnime) => voi
       setLoading(true);
       setError(null);
       try {
-        const r = await api.searchCatalog(term);
+        const r = media === 'anime' ? await api.searchCatalog(term) : await api.searchCatalogMedia(term, media);
         if (!cancelled) { setResults(r); setOpen(true); }
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
@@ -29,7 +29,7 @@ export function CatalogSearch({ onSelect }: { onSelect: (a: CatalogAnime) => voi
       }
     }, 400); // debounce: respeta el límite de AniList
     return () => { cancelled = true; clearTimeout(t); };
-  }, [q]);
+  }, [q, media]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => { if (!boxRef.current?.contains(e.target as Node)) setOpen(false); };
@@ -41,7 +41,7 @@ export function CatalogSearch({ onSelect }: { onSelect: (a: CatalogAnime) => voi
     <div className="catalog" ref={boxRef}>
       <label>Buscar en AniList
         <input
-          placeholder="Escribe el nombre del anime…"
+          placeholder={media === 'anime' ? 'Escribe el nombre del anime…' : media === 'manga' ? 'Escribe el nombre del manga…' : 'Escribe el nombre de la novela…'}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => results.length && setOpen(true)}

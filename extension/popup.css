@@ -107,3 +107,7 @@ input:focus, select:focus { outline: 2px solid var(--accent-strong); outline-off
 .watch-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .watch-row .btn { display: inline-flex; align-items: center; min-height: 40px; font-size: 13px; text-decoration: none; background: var(--navy); border-color: var(--navy); color: var(--cream); }
 .watch-row .link { align-self: center; }
+.settings { display: flex; flex-direction: column; gap: 6px; }
+.settings summary { cursor: pointer; font-weight: 600; font-size: .85rem; min-height: 28px; display: flex; align-items: center; }
+.settings label.check { display: flex; gap: 8px; align-items: flex-start; font-size: .8rem; line-height: 1.35; }
+.settings label.check input { flex: none; margin-top: 1px; }

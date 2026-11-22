@@ -54,7 +54,13 @@ export default function PublicListPage() {
               <div>
                 <span className="eyebrow">Lista pública</span>
                 <h1 style={{ marginTop: 8 }}>@{data.username}</h1>
-                <p>{data.animes.length} animes · {episodes} capítulos vistos</p>
+                <p>{data.animes.length} títulos · {episodes} capítulos vistos</p>
+                {session && (
+                  <div className="row">
+                    <Link href={`/friends/${data.username}`} className="btn primary">Comparar con mi lista</Link>
+                    <button className="btn" onClick={() => api.follow(data.username).then(() => alert(`Ahora sigues a @${data.username}`)).catch((e) => alert(e.message))}>Seguir</button>
+                  </div>
+                )}
               </div>
             </section>
 

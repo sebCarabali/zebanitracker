@@ -39,6 +39,7 @@ export default function CatalogDetailPage() {
       setMine(await api.create({
         title: anime.title, total_episodes: anime.total_episodes, cover_url: anime.cover_url,
         source_url: anime.site_url, anilist_id: anime.anilist_id, status, watched_episodes: 0,
+        media_type: anime.media_type ?? 'anime', total_volumes: anime.total_volumes ?? null,
       }));
     } catch (e) {
       setError((e as Error).message);
@@ -103,9 +104,9 @@ export default function CatalogDetailPage() {
                 {anime.trailer_url && <a href={anime.trailer_url} target="_blank" rel="noreferrer" className="btn glass lg">Tráiler ↗</a>}
                 <a href={anime.site_url} target="_blank" rel="noreferrer" className="btn glass lg">AniList ↗</a>
               </div>
-              <WatchLinks variant="hero" max={eps}
+              {(anime.media_type ?? 'anime') === 'anime' && <WatchLinks variant="hero" max={eps}
                 anime={{ title: anime.title, title_romaji: anime.title_romaji, source_url: mine?.source_url, last_episode_url: mine?.last_episode_url }}
-                episode={Math.min((mine?.watched_episodes ?? 0) + 1, eps ?? Infinity)} />
+                episode={Math.min((mine?.watched_episodes ?? 0) + 1, eps ?? Infinity)} />}
               {error && <p className="error small" style={{ margin: 0 }}>{error}</p>}
             </div>
           </div>
@@ -118,7 +119,7 @@ export default function CatalogDetailPage() {
             <h2 style={{ fontSize: '1.35rem' }}>Sinopsis</h2>
             {anime.description
               ? <SafeBoundary name="sinopsis" fallback={<p className="synopsis">{anime.description}</p>}><Synopsis anilistId={anime.anilist_id} original={anime.description} /></SafeBoundary>
-              : <p className="muted" style={{ margin: 0 }}>AniList aún no tiene sinopsis para este anime.</p>}
+              : <p className="muted" style={{ margin: 0 }}>AniList aún no tiene sinopsis para esta obra.</p>}
           </section>
 
           {(anime.genres.length > 0 || anime.tags.length > 0) && (
@@ -131,8 +132,8 @@ export default function CatalogDetailPage() {
             </section>
           )}
 
-          <SeasonsPanel key={anime.anilist_id} currentAnilistId={anime.anilist_id}
-            onListChange={(added) => { const me = added.find((a) => a.anilist_id === anime.anilist_id); if (me) setMine(me); }} />
+          {(anime.media_type ?? 'anime') === 'anime' && <SeasonsPanel key={anime.anilist_id} currentAnilistId={anime.anilist_id}
+            onListChange={(added) => { const me = added.find((a) => a.anilist_id === anime.anilist_id); if (me) setMine(me); }} />}
 
           {anime.relations.length > 0 && (
             <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

@@ -47,7 +47,7 @@ export function detectFromJkUrl(url) {
 
 /** Anime de la lista cuyo slug de JKAnime (aprendido o derivado del romaji) coincide. */
 export function findBySlug(animes, slug) {
-  return animes.find((a) => [a.source_url, a.last_episode_url].some((u) => detectFromJkUrl(u ?? '')?.slug === slug))
+  return animes.find((a) => [a.source_url, a.last_episode_url].some((u) => (detectFromJkUrl(u ?? '') ?? detectFromUrl(u ?? ''))?.slug === slug))
     ?? animes.find((a) => slugify(a.title_romaji || a.title) === slug)
     ?? null;
 }
@@ -68,4 +68,60 @@ export function guessNextEpisodeUrl(url, watched) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Reconoce el anime y el capítulo según la URL de sitios conocidos:
+ * - JKAnime: /sousou-no-frieren/12/
+ * - AnimeFLV / TioAnime / AnimeYT: /ver/sousou-no-frieren-12
+ * - MonosChinos: /ver/sousou-no-frieren-episodio-12
+ * - AnimeAV1 / Latanime: /media/sousou-no-frieren/12 · /ver/sousou-no-frieren-episodio-12
+ * - HiAnime / AniWatch / 9anime: /watch/sousou-no-frieren-18542?ep=… (capítulo por el título)
+ * - Crunchyroll: /watch/GXXXX/titulo-del-capitulo (anime y capítulo por el título de la pestaña)
+ */
+export function detectFromUrl(url) {
+  let u;
+  try { u = new URL(url); } catch { return null; }
+  const host = u.hostname.replace(/^www\./, '');
+  const parts = u.pathname.split('/').filter(Boolean);
+  const titleOf = (slug) => slug.replace(/-/g, ' ').trim();
+
+  const jk = detectFromJkUrl(url);
+  if (jk) return { ...jk, site: 'jkanime' };
+
+  if (parts[0] === 'ver' && parts[1]) {
+    const m = parts[1].match(/^(.+?)-(?:episodio-|capitulo-|ep-)?(\d{1,4})$/i);
+    if (m) return { slug: m[1], episode: Number(m[2]), title: titleOf(m[1]), site: host };
+  }
+  if ((parts[0] === 'media' || parts[0] === 'anime') && parts[1] && /^\d{1,4}$/.test(parts[2] ?? '')) {
+    return { slug: parts[1], episode: Number(parts[2]), title: titleOf(parts[1]), site: host };
+  }
+  if (parts[0] === 'watch' && parts[1] && !/crunchyroll/.test(host)) {
+    const slug = parts[1].replace(/-\d{3,}$/, ''); // quita el id numérico final
+    const ep = u.searchParams.get('episode') ?? u.searchParams.get('ep_num');
+    return { slug, episode: ep && /^\d+$/.test(ep) ? Number(ep) : null, title: titleOf(slug), site: host };
+  }
+  return null;
+}
+
+/** Combina título de la pestaña y URL: la URL manda en el número de capítulo cuando lo trae. */
+export function detectPage(url = '', tabTitle = '') {
+  const fromTitle = detectFromTab(tabTitle);
+  const fromUrl = detectFromUrl(url);
+  return {
+    title: fromTitle.title || fromUrl?.title || '',
+    altTitle: fromUrl?.title ?? null,
+    slug: fromUrl?.slug ?? null,
+    site: fromUrl?.site ?? null,
+    episode: fromUrl?.episode ?? fromTitle.episode ?? null,
+    jk: fromUrl?.site === 'jkanime' ? fromUrl : null,
+  };
+}
+
+/** Anime de tu lista que corresponde a la página (slug aprendido → título de la pestaña → título de la URL). */
+export function matchPage(animes, d) {
+  return (d.slug && findBySlug(animes, d.slug))
+    || findMatch(animes, d.title)
+    || (d.altTitle && findMatch(animes, d.altTitle))
+    || null;
 }

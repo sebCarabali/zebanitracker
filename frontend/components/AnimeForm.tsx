@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Anime, AnimeInput, AnimeStatus, CatalogAnime, STATUS_LABELS } from '@/lib/api';
+import { useEffect, useState } from 'react';
+import { api, Anime, AnimeInput, AnimeStatus, CatalogAnime, MediaType, STATUS_LABELS } from '@/lib/api';
+import { MediaTabs } from './MediaTabs';
+import { TagEditor } from './TagEditor';
 import { CatalogSearch } from './CatalogSearch';
 
 export function AnimeForm({ initial, submitLabel, onSubmit }: {
@@ -18,6 +20,12 @@ export function AnimeForm({ initial, submitLabel, onSubmit }: {
   const [source, setSource] = useState(initial?.source_url ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [anilistId, setAnilistId] = useState<number | null>(initial?.anilist_id ?? null);
+  const [media, setMedia] = useState<MediaType>(initial?.media_type ?? 'anime');
+  const [volumes, setVolumes] = useState(initial?.total_volumes?.toString() ?? '');
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
+  const [knownTags, setKnownTags] = useState<string[]>([]);
+
+  useEffect(() => { api.tags().then((t) => setKnownTags(t.map((x) => x.tag))).catch(() => {}); }, []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +44,9 @@ export function AnimeForm({ initial, submitLabel, onSubmit }: {
         source_url: source.trim() || null,
         notes: notes.trim() || null,
         anilist_id: anilistId,
+        media_type: media,
+        total_volumes: media === 'anime' || volumes === '' ? null : Number(volumes),
+        tags,
       });
     } catch (err) {
       setError((err as Error).message);
@@ -49,11 +60,14 @@ export function AnimeForm({ initial, submitLabel, onSubmit }: {
     setCover(a.cover_url ?? '');
     if (!source) setSource(a.site_url);
     setAnilistId(a.anilist_id);
+    if (a.media_type) setMedia(a.media_type);
+    setVolumes(a.total_volumes?.toString() ?? '');
   }
 
   return (
     <form className="form panel" onSubmit={handle}>
-      <CatalogSearch onSelect={pick} />
+      <MediaTabs value={media} onChange={(v) => { if (v !== 'all') { setMedia(v); setAnilistId(null); } }} />
+      <CatalogSearch onSelect={pick} media={media} />
       {anilistId && (
         <p className="linked small">
           {cover && <img src={cover} alt="" />}
@@ -72,6 +86,11 @@ export function AnimeForm({ initial, submitLabel, onSubmit }: {
           <input type="number" min={0} placeholder="Desconocido" value={total} onChange={(e) => setTotal(e.target.value)} />
         </label>
       </div>
+      {media !== 'anime' && (
+        <label>Total de volúmenes
+          <input type="number" min={0} placeholder="Desconocido" value={volumes} onChange={(e) => setVolumes(e.target.value)} />
+        </label>
+      )}
       <div className="grid2">
         <label>Estado
           <select value={status} onChange={(e) => setStatus(e.target.value as AnimeStatus)}>
@@ -88,6 +107,10 @@ export function AnimeForm({ initial, submitLabel, onSubmit }: {
       <label>Dónde lo ves (URL)
         <input type="url" placeholder="https://…" value={source} onChange={(e) => setSource(e.target.value)} />
       </label>
+      <div className="form" style={{ gap: 6 }}>
+        <span style={{ fontWeight: 600 }}>Listas y etiquetas</span>
+        <TagEditor value={tags} onChange={setTags} known={knownTags} />
+      </div>
       <label>Notas
         <textarea rows={3} maxLength={5000} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </label>

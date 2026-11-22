@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { api, Anime, AnimeStatus, currentSeason, Discover, SEASON_LABELS, WatchEvent } from '@/lib/api';
+import { api, Anime, AnimeStatus, currentSeason, Discover, formatDuration, MediaType, MINUTES_PER_EPISODE, remainingMinutes, SEASON_LABELS, WatchEvent } from '@/lib/api';
+import { MediaTabs } from '@/components/MediaTabs';
+import { StaleReminders } from '@/components/StaleReminders';
 import { useAuth } from '@/components/AuthProvider';
 import { AnimeCard, ContinueCard, SeasonGroup } from '@/components/AnimeCard';
 import { Cover } from '@/components/Cover';
@@ -40,6 +42,16 @@ export default function HomePage() {
   const [offline, setOffline] = useState(false);
   const [discover, setDiscover] = useState<Discover | null>(null);
   const [events, setEvents] = useState<WatchEvent[]>([]);
+  const [media, setMedia] = useState<MediaType | 'all'>('all');
+  const [tag, setTag] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const t = new URLSearchParams(window.location.search).get('tag');
+      if (t) setTag(t);
+      const m = localStorage.getItem('zt-media') as MediaType | 'all' | null; if (m) setMedia(m);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     try {
@@ -82,11 +94,23 @@ export default function HomePage() {
 
   const replace = (a: Anime) => setAnimes((list) => list.map((x) => (x.id === a.id ? a : x)));
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { all: animes.length, fav: animes.filter((a) => a.is_favorite).length };
-    for (const a of animes) c[a.status] = (c[a.status] ?? 0) + 1;
+  const ofMedia = useMemo(() => animes.filter((a) => media === 'all' || (a.media_type ?? 'anime') === media), [animes, media]);
+  const mediaCounts = useMemo(() => {
+    const c: Partial<Record<MediaType | 'all', number>> = { all: animes.length };
+    for (const a of animes) c[a.media_type ?? 'anime'] = (c[a.media_type ?? 'anime'] ?? 0) + 1;
     return c;
   }, [animes]);
+  const allTags = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const a of ofMedia) for (const t of a.tags ?? []) c.set(t, (c.get(t) ?? 0) + 1);
+    return [...c].sort((a, b) => b[1] - a[1]);
+  }, [ofMedia]);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: ofMedia.length, fav: ofMedia.filter((a) => a.is_favorite).length };
+    for (const a of ofMedia) c[a.status] = (c[a.status] ?? 0) + 1;
+    return c;
+  }, [ofMedia]);
 
   const continueList = useMemo(
     () => animes
@@ -106,11 +130,12 @@ export default function HomePage() {
       score: (a, b) => (b.score ?? 0) - (a.score ?? 0),
       next: (a, b) => (a.next_episode_at ?? '9999').localeCompare(b.next_episode_at ?? '9999'),
     };
-    return animes
+    return ofMedia
+      .filter((a) => !tag || (a.tags ?? []).includes(tag))
       .filter((a) => tab === 'all' || (tab === 'fav' ? a.is_favorite : a.status === tab))
       .filter((a) => !q || a.title.toLowerCase().includes(q))
       .sort(cmp[sort]);
-  }, [animes, tab, query, sort]);
+  }, [ofMedia, tab, query, sort, tag]);
 
   // Agrupar temporadas: una tarjeta por franquicia con el avance de toda la serie
   const cards = useMemo((): { anime: Anime; group?: SeasonGroup }[] => {
@@ -165,12 +190,17 @@ export default function HomePage() {
     }
   }
 
-  const episodes = animes.reduce((n, a) => n + a.watched_episodes, 0);
+  const animeOnly = animes.filter((a) => (a.media_type ?? 'anime') === 'anime');
+  const episodes = animeOnly.reduce((n, a) => n + a.watched_episodes, 0);
+  const minutes = animeOnly.reduce((n, a) => n + a.watched_episodes * (a.duration ?? MINUTES_PER_EPISODE), 0);
+  const chapters = animes.filter((a) => a.media_type && a.media_type !== 'anime').reduce((n, a) => n + a.watched_episodes, 0);
+  const plan = animes.filter((a) => a.status === 'plan_to_watch');
+  const planMinutes = plan.reduce((n, a) => n + (remainingMinutes(a) ?? 0), 0);
   const stats = [
-    { value: animes.length, label: 'Animes' },
+    { value: animes.length, label: 'En tu lista' },
     { value: counts.watching ?? 0, label: 'En curso' },
-    { value: episodes, label: 'Capítulos vistos' },
-    { value: `${Math.round((episodes * 24) / 60)} h`, label: 'Horas vistas' },
+    chapters ? { value: chapters, label: 'Caps. de manga leídos' } : { value: episodes, label: 'Capítulos vistos' },
+    { value: `${Math.round(minutes / 60)} h`, label: 'Horas vistas' },
   ];
 
   if (!session) return null;
@@ -199,6 +229,8 @@ export default function HomePage() {
       </section>
 
       {error && <p className="error">{error}</p>}
+
+      {!loading && !offline && <SafeBoundary name="recordatorios"><StaleReminders onChange={replace} /></SafeBoundary>}
       {offline && <div className="banner">Sin conexión: estás viendo la última copia guardada de tu lista.</div>}
 
       {continueList.length > 0 && (
@@ -258,6 +290,28 @@ export default function HomePage() {
             <input placeholder="Buscar en mi lista…" value={query} onChange={(e) => setQuery(e.target.value)} />
           </label>
         </div>
+        <div className="toolbar-row">
+          {((mediaCounts.manga ?? 0) + (mediaCounts.novel ?? 0) > 0 || media !== 'all') && (
+            <MediaTabs allowAll value={media} counts={mediaCounts} label="Tipo de obra"
+              onChange={(v) => { setMedia(v); try { localStorage.setItem('zt-media', v); } catch {} }} />
+          )}
+        </div>
+        {allTags.length > 0 && (
+          <div className="chips" style={{ marginBottom: 12 }} aria-label="Mis listas">
+            <button className={`chip ${!tag ? 'on' : ''}`} onClick={() => setTag(null)}>Todas</button>
+            {allTags.map(([t, n]) => (
+              <button key={t} className={`chip ${tag === t ? 'on' : ''}`} aria-pressed={tag === t} onClick={() => setTag(tag === t ? null : t)}>
+                #{t} <span className="muted">{n}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {tab === 'plan_to_watch' && plan.length > 0 && (
+          <div className="banner" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+            {plan.length} pendientes{planMinutes ? ` · unas ${formatDuration(planMinutes)} de anime` : ''}.
+            <Link href="/plan">Ordenarlos y elegir qué ver hoy →</Link>
+          </div>
+        )}
         <div className="toolbar-row">
           <div className="tabs" role="tablist" aria-label="Filtrar por estado">
             {TABS.map(([id, label]) => (

@@ -9,6 +9,8 @@ export function anime(over: Record<string, unknown> = {}) {
     anilist_id: 154587, mal_id: 52991, genres: ['Adventure', 'Fantasy'], studios: ['MADHOUSE'], format: 'TV', season_year: 2023,
     airing_status: 'FINISHED', next_episode_at: null, last_episode_url: null, completed_at: null, franchise_id: null, season_number: null,
     last_watched_at: '2026-11-13T10:00:00Z', created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-13T10:00:00Z',
+    media_type: 'anime', total_volumes: null, watched_volumes: 0, duration: 24, priority: null, tags: [], rewatching: false,
+    reminder_snoozed_until: null,
     ...over,
   };
 }
@@ -61,6 +63,9 @@ export const test = base.extend<{ api: { calls: { method: string; path: string; 
       if (path === '/animes/sync-episodes') return json(route, { checked: 0, updated: 0, linked: 0 });
       if (path === '/animes/activity') return json(route, [{ anime_id: 'a1', episode: 12, watched_at: new Date().toISOString() }]);
       if (path === '/animes/discover') return json(route, { recommendations: [], sequels: [] });
+      if (path === '/animes/stale') return json(route, { weeks: 3, items: [] });
+      if (path === '/animes/tags') return json(route, []);
+      if (/^\/animes\/(\w+\/)?rewatches$/.test(path) && req.method() === 'GET') return json(route, []);
       const next = path.match(/^\/animes\/(\w+)\/progress\/next$/);
       if (next) {
         list = list.map((a) => (a.id === next[1] ? { ...a, watched_episodes: (a.watched_episodes as number) + 1 } : a));

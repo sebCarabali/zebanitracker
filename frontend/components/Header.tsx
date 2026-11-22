@@ -10,7 +10,10 @@ import { PlayIcon, PlusIcon } from './Icons';
 const NAV = [
   { href: '/', label: 'Mi lista' },
   { href: '/calendar', label: 'Calendario' },
+  { href: '/plan', label: 'Planeo ver' },
   { href: '/explore', label: 'Explorar' },
+  { href: '/friends', label: 'Amigos' },
+  { href: '/together', label: 'Ver juntos' },
   { href: '/stats', label: 'Estadísticas' },
 ];
 
@@ -50,7 +53,7 @@ export function Header() {
         ))}
       </nav>
       <div className="header-actions">
-        <Link href="/animes/new" className="btn primary"><PlusIcon /> <span className="label">Agregar anime</span></Link>
+        <Link href="/animes/new" className="btn primary"><PlusIcon /> <span className="label">Agregar</span></Link>
         <div className="menu" ref={menuRef}>
           <button className="avatar" aria-label="Cuenta" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
             {email.slice(0, 1)}

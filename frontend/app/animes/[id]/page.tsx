@@ -1,9 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { AIRING_LABELS, api, Anime, AnimeDetails, AnimeStatus, FORMAT_LABELS, relativeTime, SEASON_LABELS, SOURCE_LABELS, STATUS_COLORS, STATUS_LABELS } from '@/lib/api';
+import { AIRING_LABELS, api, Anime, AnimeDetails, AnimeStatus, FORMAT_LABELS, MEDIA_LABELS, relativeTime, SEASON_LABELS, SOURCE_LABELS, STATUS_COLORS, STATUS_LABELS } from '@/lib/api';
+import { RangeMark } from '@/components/RangeMark';
+import { Recap } from '@/components/Recap';
+import { RewatchPanel } from '@/components/RewatchPanel';
+import { TagEditor } from '@/components/TagEditor';
 import { useAuth } from '@/components/AuthProvider';
 import { Cover } from '@/components/Cover';
 import { BackIcon, PlayIcon, RefreshIcon, StarIcon } from '@/components/Icons';
@@ -29,6 +33,22 @@ export default function AnimeDetailPage() {
   const [details, setDetails] = useState<AnimeDetails | null>(null);
   const [review, setReview] = useState('');
   const [reviewSaved, setReviewSaved] = useState(false);
+  const [knownTags, setKnownTags] = useState<string[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const search = useSearchParams();
+  const staleAction = search.get('stale');
+
+  useEffect(() => { if (session) api.tags().then((t) => setKnownTags(t.map((x) => x.tag))).catch(() => {}); }, [session]);
+
+  // Enlaces del correo "¿Lo retomas o lo dejas?"
+  useEffect(() => {
+    if (!session || (staleAction !== 'resume' && staleAction !== 'drop')) return;
+    api.staleAction(id, staleAction)
+      .then((a) => { load(a); setNotice(staleAction === 'drop' ? 'Listo: lo marcamos como abandonado.' : '¡Bien! No te volveremos a preguntar por un tiempo. ¿Un repaso antes de seguir?'); })
+      .catch((e) => setError(e.message))
+      .finally(() => router.replace(`/animes/${id}`));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, staleAction, id]);
 
   // Ficha de AniList (sinopsis, estudio…) para los animes vinculados
   useEffect(() => {
@@ -72,6 +92,11 @@ export default function AnimeDetailPage() {
   const aired = anime.aired_episodes;
   // Cuántos botones mostrar: total; si no, emitidos; si no, lo visto + 12
   const gridSize = total ?? (aired !== null ? Math.max(aired, anime.watched_episodes) + 3 : anime.watched_episodes + 12);
+  // Mangas largos (1000+ capítulos): solo se muestra una ventana alrededor de donde vas
+  const gridStart = gridSize > 240 ? Math.max(0, anime.watched_episodes - 60) : 0;
+  const gridCount = gridSize > 240 ? Math.min(gridSize - gridStart, 180) : gridSize;
+  const isAnime = (anime.media_type ?? 'anime') === 'anime';
+  const animeTags = anime.tags ?? [];
   const known = total ?? aired;
   const pct = known ? Math.min(100, Math.round((anime.watched_episodes / known) * 100)) : null;
   const dash = `${(((pct ?? 0) / 100) * RING_C).toFixed(1)} ${RING_C.toFixed(1)}`;
@@ -106,6 +131,9 @@ export default function AnimeDetailPage() {
   }
 
   const tags = [
+    !isAnime ? MEDIA_LABELS[anime.media_type] : null,
+    anime.rewatching ? '↻ Rewatch' : null,
+    !isAnime && anime.total_volumes ? `${anime.total_volumes} vols.` : null,
     anime.season_number && anime.season_number > 1 ? `Temporada ${anime.season_number}` : null,
     total ? `${total} caps.` : aired ? `${aired} caps. emitidos` : 'Capítulos desconocidos',
     anime.airing_status ? AIRING_LABELS[anime.airing_status] : null,
@@ -149,8 +177,15 @@ export default function AnimeDetailPage() {
                   </button>
                 )}
               </div>
-              <WatchLinks anime={anime} variant="hero" max={total ?? aired}
-                episode={Math.min(anime.watched_episodes + 1, total ?? aired ?? anime.watched_episodes + 1)} />
+              {isAnime && (
+                <WatchLinks anime={anime} variant="hero" max={total ?? aired}
+                  episode={Math.min(anime.watched_episodes + 1, total ?? aired ?? anime.watched_episodes + 1)} />
+              )}
+              {animeTags.length > 0 && (
+                <div className="tags" style={{ marginTop: 10 }}>
+                  {animeTags.map((t) => <Link key={t} href={`/?tag=${encodeURIComponent(t)}`} className="tag">#{t}</Link>)}
+                </div>
+              )}
             </div>
 
             <div className="ring-box" style={{ order: 3 }}>
@@ -170,6 +205,7 @@ export default function AnimeDetailPage() {
         </div>
       </section>
 
+      {notice && <div className="container" style={{ paddingBottom: 0 }}><div className="banner">{notice}</div></div>}
       <div className="detail">
         <div className="detail-main">
         <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -181,8 +217,8 @@ export default function AnimeDetailPage() {
             <span className="muted small">{anime.watched_episodes ? `Último visto: cap. ${anime.watched_episodes}` : 'Aún no empiezas'}</span>
           </div>
           <div className="episodes">
-            {Array.from({ length: gridSize }, (_, i) => {
-              const n = i + 1;
+            {Array.from({ length: gridCount }, (_, i) => {
+              const n = gridStart + i + 1;
               const seen = n <= anime.watched_episodes;
               const next = n === anime.watched_episodes + 1;
               const future = !seen && aired !== null && n > aired && anime.airing_status === 'RELEASING';
@@ -201,11 +237,18 @@ export default function AnimeDetailPage() {
             <span><i style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)' }} />Pendiente</span>
             {anime.airing_status === 'RELEASING' && <span><i style={{ border: '1px dashed var(--border-2)', opacity: .6 }} />Aún no emitido</span>}
           </div>
+          {gridSize > 240 && <p className="muted small" style={{ margin: 0 }}>Mostrando del {gridStart + 1} al {gridStart + gridCount}. Usa “Vi del … al …” para saltos grandes.</p>}
+          <div className="range-box">
+            <h3 className="section-label" style={{ margin: 0 }}>Marcar varios de golpe</h3>
+            <RangeMark anime={anime} onDone={(a) => setAnime(a)} />
+          </div>
           {!total && <p className="muted small" style={{ margin: 0 }}>
             {anime.anilist_id ? 'AniList aún no publica el total; se actualizará solo.' : 'Escribe el total en “Editar” o vincúlalo a AniList para completarlo solo.'}
           </p>}
           {error && <p className="error small">{error}</p>}
         </section>
+
+        <SafeBoundary name="resumen"><Recap key={anime.id} anime={anime} /></SafeBoundary>
 
         {details?.description && (
           <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -257,6 +300,28 @@ export default function AnimeDetailPage() {
             </button>
           </div>
 
+          <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <h2 className="section-label" style={{ margin: 0 }}>Mis listas</h2>
+            <TagEditor value={animeTags} known={knownTags} disabled={busy}
+              onChange={(tags) => run(() => api.update(anime.id, { tags }), { tags })} />
+          </div>
+
+          {!isAnime && (
+            <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <h2 className="section-label" style={{ margin: 0 }}>Volúmenes</h2>
+              <div className="row">
+                <button className="btn icon" aria-label="Un volumen menos" disabled={busy || anime.watched_volumes <= 0}
+                  onClick={() => run(() => api.update(anime.id, { watched_volumes: anime.watched_volumes - 1 }), { watched_volumes: anime.watched_volumes - 1 })}>−</button>
+                <strong style={{ fontSize: '1.3rem' }}>{anime.watched_volumes}</strong>
+                <span className="muted">de {anime.total_volumes ?? '?'}</span>
+                <button className="btn icon" aria-label="Un volumen más" disabled={busy || (anime.total_volumes !== null && anime.watched_volumes >= anime.total_volumes)}
+                  onClick={() => run(() => api.update(anime.id, { watched_volumes: anime.watched_volumes + 1 }), { watched_volumes: anime.watched_volumes + 1 })}>+</button>
+              </div>
+            </div>
+          )}
+
+          <RewatchPanel anime={anime} onChange={setAnime} />
+
           <form className="panel form" onSubmit={save}>
             <h2 className="section-label">Editar</h2>
             <label>Título
@@ -266,8 +331,8 @@ export default function AnimeDetailPage() {
               <input type="number" min={anime.watched_episodes} placeholder="Desconocido" value={form.total}
                 onChange={(e) => setForm({ ...form, total: e.target.value })} />
             </label>
-            <label>Dónde lo veo
-              <span className="muted small" style={{ fontWeight: 400 }}>Pega la página del anime en JKAnime para que “Ver cap.” abra el enlace exacto.</span>
+            <label>{isAnime ? 'Dónde lo veo' : 'Dónde lo leo'}
+              {isAnime && <span className="muted small" style={{ fontWeight: 400 }}>Pega la página del anime en JKAnime para que “Ver cap.” abra el enlace exacto.</span>}
               <input type="url" placeholder="https://jkanime.net/nombre-del-anime/" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} />
             </label>
             <label>Notas

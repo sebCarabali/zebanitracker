@@ -3,8 +3,18 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AIRING_LABELS, AnimeStatus, api, BrowseFilters, CatalogAnime, currentSeason, FilterOptions, FORMAT_LABELS, SEASON_LABELS, SORT_LABELS,
+  AIRING_LABELS, AnimeStatus, api, BrowseFilters, CatalogAnime, currentSeason, FilterOptions, FORMAT_LABELS, MediaType, SEASON_LABELS, SORT_LABELS,
 } from '@/lib/api';
+import { MediaTabs } from '@/components/MediaTabs';
+import { NaturalSearch } from '@/components/NaturalSearch';
+import { SafeBoundary } from '@/components/SafeBoundary';
+
+const FORMATS_BY_MEDIA: Record<MediaType, string[]> = {
+  anime: ['TV', 'TV_SHORT', 'MOVIE', 'SPECIAL', 'OVA', 'ONA', 'MUSIC'],
+  manga: ['MANGA', 'ONE_SHOT'],
+  novel: [],
+};
+const NOUN: Record<MediaType, string> = { anime: 'anime', manga: 'manga', novel: 'novela ligera' };
 import { useAuth } from '@/components/AuthProvider';
 import { Cover } from '@/components/Cover';
 import { CheckIcon, SearchIcon, SeasonIcon, TagIcon } from '@/components/Icons';
@@ -26,6 +36,9 @@ export default function ExplorePage() {
   const [mine, setMine] = useState<Map<number, { id: string; status: string }>>(new Map());
   const [adding, setAdding] = useState<number | null>(null);
   const [tagInput, setTagInput] = useState('');
+  const [aiMode, setAiMode] = useState(false);
+  const media: MediaType = filters.media ?? 'anime';
+  const isAnime = media === 'anime';
   const requestId = useRef(0);
 
   // /explore?season=FALL&year=2026 (enlace "estrenos de la temporada")
@@ -33,7 +46,10 @@ export default function ExplorePage() {
     const p = new URLSearchParams(window.location.search);
     const season = p.get('season') ?? undefined;
     const year = p.get('year') ? Number(p.get('year')) : undefined;
+    const m = p.get('media') as MediaType | null;
     if (season || year) setFilters((f) => ({ ...f, season, year }));
+    if (m === 'manga' || m === 'novel') setFilters((f) => ({ ...f, media: m }));
+    if (p.get('ai')) setAiMode(true);
   }, []);
 
   const now = currentSeason();
@@ -98,7 +114,8 @@ export default function ExplorePage() {
     try {
       const created = await api.create({
         title: a.title, total_episodes: a.total_episodes, cover_url: a.cover_url, source_url: a.site_url,
-        anilist_id: a.anilist_id, status, watched_episodes: 0,
+        anilist_id: a.anilist_id, status, watched_episodes: 0, media_type: a.media_type ?? media,
+        total_volumes: a.total_volumes ?? null,
       });
       setMine((m) => new Map(m).set(a.anilist_id, { id: created.id, status }));
     } catch (e) {
@@ -116,54 +133,73 @@ export default function ExplorePage() {
         <div className="explore-hero-inner">
           <div>
             <span className="eyebrow">Catálogo de AniList</span>
-            <h1 style={{ marginTop: 8 }}>Encuentra tu próximo anime</h1>
+            <h1 style={{ marginTop: 8 }}>Encuentra tu próximo {NOUN[media]}</h1>
           </div>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <MediaTabs value={media} label="Qué buscar"
+              onChange={(v) => v !== 'all' && setFilters((f) => ({ ...f, media: v, formats: [], season: undefined, ...(v !== 'anime' ? { status: undefined } : {}) }))} />
+            <div className="segmented" role="radiogroup" aria-label="Modo de búsqueda">
+              <button role="radio" aria-checked={!aiMode} onClick={() => setAiMode(false)}><SearchIcon size={14} /> Filtros</button>
+              <button role="radio" aria-checked={aiMode} onClick={() => setAiMode(true)}>✦ Buscar con IA</button>
+            </div>
+          </div>
+          {aiMode ? (
+            <SafeBoundary name="búsqueda con IA">
+              <NaturalSearch media={media} mine={mine} adding={adding} onAdd={add} />
+            </SafeBoundary>
+          ) : (
+          <>
           <label className="search xl">
             <SearchIcon size={20} />
             <span className="sr-only">Buscar por nombre</span>
-            <input placeholder="Busca por nombre: Frieren, Dandadan…" value={filters.search ?? ''} onChange={(e) => set('search', e.target.value)} />
+            <input placeholder={isAnime ? 'Busca por nombre: Frieren, Dandadan…' : media === 'manga' ? 'Busca por nombre: Berserk, Chainsaw Man…' : 'Busca por nombre: Mushoku Tensei, Overlord…'}
+              value={filters.search ?? ''} onChange={(e) => set('search', e.target.value)} />
           </label>
           <div className="inline-filters">
-            <div className="segmented" role="radiogroup" aria-label="Temporada">
+            {isAnime && <div className="segmented" role="radiogroup" aria-label="Temporada">
               {['', 'WINTER', 'SPRING', 'SUMMER', 'FALL'].map((s) => (
                 <button key={s || 'all'} role="radio" aria-checked={(filters.season ?? '') === s} onClick={() => set('season', s)}>
                   <SeasonIcon season={s} />{s ? SEASON_LABELS[s] : 'Todas'}
                 </button>
               ))}
-            </div>
-            <button type="button" className="chip" aria-pressed={isThisSeason}
+            </div>}
+            {isAnime && <button type="button" className="chip" aria-pressed={isThisSeason}
               onClick={() => setFilters((f) => isThisSeason ? { ...f, season: undefined, year: undefined } : { ...f, season: now.season, year: now.year })}>
               Esta temporada · {SEASON_LABELS[now.season]} {now.year}
-            </button>
+            </button>}
             <label>Año
               <select value={filters.year ?? ''} onChange={(e) => set('year', e.target.value ? Number(e.target.value) : undefined)}>
                 <option value="">Cualquiera</option>
                 {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
             </label>
-            <label>Emisión
+            <label>{isAnime ? 'Emisión' : 'Publicación'}
               <select value={filters.status ?? ''} onChange={(e) => set('status', e.target.value)}>
                 <option value="">Cualquiera</option>
                 {Object.entries(AIRING_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </label>
             {activeCount > 0 && (
-              <button className="link" style={{ fontWeight: 600, minHeight: 44 }} onClick={() => setFilters(EMPTY)}>
+              <button className="link" style={{ fontWeight: 600, minHeight: 44 }} onClick={() => setFilters({ ...EMPTY, media: filters.media })}>
                 Limpiar filtros ({activeCount})
               </button>
             )}
           </div>
+          </>
+          )}
         </div>
       </section>
 
+      {!aiMode && (
+
       <div className="explore">
         <aside className="filters">
-          <fieldset className="chips">
+          {FORMATS_BY_MEDIA[media].length > 0 && <fieldset className="chips">
             <legend className="section-label">Formato</legend>
-            {Object.entries(FORMAT_LABELS).map(([v, l]) => (
-              <button key={v} type="button" className="chip" aria-pressed={!!filters.formats?.includes(v)} onClick={() => toggleIn('formats', v)}>{l}</button>
+            {FORMATS_BY_MEDIA[media].map((v) => (
+              <button key={v} type="button" className="chip" aria-pressed={!!filters.formats?.includes(v)} onClick={() => toggleIn('formats', v)}>{FORMAT_LABELS[v] ?? v}</button>
             ))}
-          </fieldset>
+          </fieldset>}
 
           <fieldset className="chips">
             <legend className="section-label">Géneros</legend>
@@ -255,7 +291,7 @@ export default function ExplorePage() {
             })}
           </div>
 
-          {!loading && !error && results.length === 0 && <div className="empty">No hay animes con esos filtros. Prueba quitando alguno.</div>}
+          {!loading && !error && results.length === 0 && <div className="empty">No hay resultados con esos filtros. Prueba quitando alguno.</div>}
           {hasNext && (
             <div className="row" style={{ justifyContent: 'center', marginTop: '1rem' }}>
               <button className="btn" disabled={loading} onClick={() => load(page + 1)}>{loading ? 'Cargando…' : 'Cargar más'}</button>
@@ -263,6 +299,7 @@ export default function ExplorePage() {
           )}
         </section>
       </div>
+      )}
     </main>
   );
 }

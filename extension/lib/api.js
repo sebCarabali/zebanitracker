@@ -26,4 +26,7 @@ export const api = {
   next: (id) => request(`/animes/${id}/progress/next`, { method: 'POST' }),
   toggleFavorite: (id) => request(`/animes/${id}/favorite`, { method: 'POST' }),
   searchCatalog: (q) => request(`/catalog/search?q=${encodeURIComponent(q)}`),
+  stale: () => request('/animes/stale'),
+  staleAction: (id, action) => request(`/animes/${id}/stale`, { method: 'POST', body: { action } }),
+  markRange: (id, from, to) => request(`/animes/${id}/progress/range`, { method: 'POST', body: { from, to } }),
 };

@@ -45,6 +45,19 @@ zebanitracker/
   - Buscador con autocompletado al crear un anime (web y extensión) que rellena título, portada y total de capítulos.
   - **Explorar** (`/explore`): catálogo de AniList con filtros de búsqueda, géneros, etiquetas, año, temporada, formato, estado de emisión y orden; agrega con un clic como *Viendo* o *Pendiente*.
   - **Importar / sincronizar** tu lista pública de AniList por nombre de usuario (`/import`): estados, progreso y favoritos. Se puede repetir sin crear duplicados; nunca retrocede tu progreso ni borra notas o enlaces.
+- **Manga y novelas ligeras**: además de anime, puedes seguir manga y novelas del catálogo de AniList con la misma estructura (capítulos, volúmenes, estados, puntuación). Selector Anime / Manga / Novela en Explorar, al agregar y en Mi lista.
+- **Planeo ver** (`/plan`): ordena tus pendientes arrastrando (o con ↑ ↓), mira cuánto tiempo suman (capítulos restantes × duración real de AniList) y usa **“¿Qué veo hoy?”**, que elige al azar según tu ánimo y el tiempo que tienes (lo de arriba sale más).
+- **¿Lo retomas o lo dejas?**: las series en *Viendo* sin avanzar hace N semanas (3 por defecto, configurable en Ajustes) aparecen en Mi lista, en la extensión y por correo con dos botones; retomar silencia el aviso N semanas, dejar las marca como *Abandonado*.
+- **Marcar varios de golpe**: “Vi del 5 al 12” (hoy, ayer u otra fecha) registra cada capítulo en el historial (cuenta para la racha) y avanza el progreso; si ya los tenías, solo los añade al historial.
+- **Rewatch**: “Empezar a verlo otra vez” reinicia el progreso (en AniList queda como *REPEATING*) y al terminar suma al contador con fecha; también puedes registrar rewatches pasados.
+- **Listas personalizadas y etiquetas** (“Para ver con amigos”, “Clásicos”, “Rewatch”…): se asignan en el detalle o al agregar, y filtran Mi lista (`/?tag=Clásicos`).
+- **IA (Groq)**, además de lo anterior:
+  - **Búsqueda en lenguaje natural** en Explorar → “✦ Buscar con IA”: “algo como Frieren pero más corto y con romance” se convierte en filtros de AniList (géneros, etiquetas, capítulos, años, nota) + recomendaciones de la comunidad para las obras de referencia, y la IA ordena los resultados reales con una razón para cada uno. Caché de 6 h por consulta.
+  - **“¿En qué iba?”**: resumen sin spoilers hasta tu último capítulo (o el que elijas), con puntos clave. Solo usa la sinopsis y los títulos de los capítulos ya vistos; caché compartida de 90 días por anime, capítulo e idioma.
+  - **Resumen del mes** en Estadísticas: cifras reales (capítulos, horas, racha, géneros, estudios, día favorito, madrugadas) y un texto con humor de la IA; el día 1 llega por correo si activaste los correos.
+- **Amigos** (`/friends`): sigue listas públicas por nombre de usuario, mira la **compatibilidad** (géneros ponderados, acuerdo en notas y títulos en común), lo que tienen en común, en qué no coinciden y lo que a tu amigo le encanta y tú no tienes.
+- **Ver juntos** (`/together`): crea una serie compartida e invita con un enlace o código (hasta 8 personas). Cada uno marca lo que vio; el avance compartido es el capítulo que **todos** vieron y, si la serie está en tu lista, tu progreso se actualiza con él.
+- **Tarjeta para compartir**: imagen PNG (1080×1350) de tu top 10, tus estadísticas o tu mes, lista para redes (compartir nativo en el celular o descargar). Se genera en la web (`POST /card`); solo acepta portadas del CDN de AniList.
 - Extensión: detecta el anime y el capítulo desde el título de la pestaña (p. ej. `Frieren Episodio 12 - AnimeFLV`). Si ya está en tu lista lo marca visto con un clic; si no, lo agrega con el enlace de la página.
 
 ## Configuración: variables de entorno en Vercel
@@ -128,7 +141,21 @@ Se despliega en Vercel con el preset **NestJS** (entrada `src/main.ts`).
 | GET | `/api/cron/notify` | Tarea diaria de correos (Vercel Cron, `CRON_SECRET`) |
 | GET / POST | `/api/ai/recommendations` `{ "request"?, "refresh"? }` | Recomendaciones con IA (GET = guardadas, POST = generar) |
 | GET | `/api/ai/description/:anilistId?lang=es` | Sinopsis traducida con IA |
+| POST | `/api/animes/:id/progress/range` `{ "from", "to", "watched_at"? }` | Marcar varios capítulos (historial y racha) |
+| POST | `/api/animes/reorder` `{ "ids": [...] }` | Orden de "Planeo ver" |
+| GET | `/api/animes/tags` | Etiquetas / listas personalizadas con su número de títulos |
+| GET | `/api/animes/stale` · POST `/api/animes/:id/stale` `{ "action": "resume" \| "drop" \| "snooze" }` | ¿Lo retomas o lo dejas? |
+| GET / POST | `/api/animes/:id/rewatches` `{ "finished_at"?, "note"? }` · DELETE `/api/animes/rewatches/:id` | Rewatches |
+| POST | `/api/animes/:id/rewatch/start` · `/rewatch/cancel` | Empezar / cancelar un rewatch |
+| GET | `/api/catalog/search?q=&media=manga` · `/api/catalog/browse?media=novel&…` | Catálogo de manga y novelas |
+| GET | `/api/social` · POST `/api/social/follow` `{ "username" }` · DELETE `/api/social/follow/:username` | Amigos |
+| GET | `/api/social/compare/:username` | Compatibilidad y comparación de listas |
+| GET / POST | `/api/parties` · POST `/api/parties/join` `{ "code" }` · PATCH `/api/parties/:id/progress` · DELETE `/api/parties/:id` | Ver juntos |
+| POST | `/api/ai/search` `{ "query", "media"? }` | Búsqueda en lenguaje natural |
+| GET | `/api/ai/recap/:animeId?episode=` | Resumen sin spoilers para retomar |
+| GET | `/api/ai/monthly?month=AAAA-MM&ai=0` | Resumen del mes (cifras + texto de IA) |
 | GET | `/api/health/ai` | Comprueba que la IA responde (público, limitado) |
+| GET | `/api/health/ai-search` | Prueba la interpretación de búsquedas en lenguaje natural (público, limitado) |
 | GET | `/api/health` | Healthcheck (público) |
 | GET | `/api/health/anilist` | Verifica la conexión con AniList (público) |
 
@@ -146,6 +173,13 @@ Se despliega en Vercel con el preset Next.js. Las variables `NEXT_PUBLIC_*` se i
 2. Si usas otro dominio para la API, agrégalo en `host_permissions` del `manifest.json`.
 3. Abre `chrome://extensions`, activa **Modo desarrollador** → **Cargar descomprimida** → selecciona la carpeta `extension/`.
 4. Inicia sesión en el popup con tu correo y contraseña (las cuentas se crean desde la web).
+
+Seguimiento automático (v1.6):
+- Reconoce anime y capítulo por la URL en **JKAnime**, **AnimeFLV**, **TioAnime**, **MonosChinos**, **AnimeAV1**, **HiAnime/AniWatch** y, en cualquier otro sitio (Crunchyroll, etc.), por el título de la pestaña (“Episodio 12”).
+- El icono muestra **✓** (o el número de capítulo) si el anime está en tu lista y **+** si no lo tienes.
+- Al llegar al 90 % del video **marca el capítulo solo** y muestra una notificación con **Deshacer**. Si el anime no está en tu lista, lo busca en AniList y propone **“Agregar y marcar cap. N”** con un clic.
+- Una vez al día pregunta **“¿Lo retomas o lo dejas?”** por las series pausadas.
+- Todo se puede desactivar en el popup → *Ajustes de la extensión*. Tras actualizar, en `chrome://extensions` pulsa **↻ Recargar** en ZebaniTracker.
 
 Pestañas del popup:
 - **Esta página**: detecta título y capítulo de la pestaña activa. Si coincide con un anime de tu lista, puedes marcar el capítulo visto; si no, lo agregas.
