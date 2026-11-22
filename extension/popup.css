@@ -39,7 +39,7 @@ h1, h2 { font-family: 'Space Grotesk', Inter, system-ui, sans-serif; letter-spac
 label.check input { width: 18px; height: 18px; min-height: 18px; accent-color: var(--accent-strong); }
 input, select {
   width: 100%; min-height: 40px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border-2);
-  background: #FFFFFF; color: var(--text); font: inherit;
+  background: var(--surface-2); color: var(--text); font: inherit;
 }
 input:focus, select:focus { outline: 2px solid var(--accent-strong); outline-offset: -1px; border-color: transparent; }
 
@@ -53,7 +53,7 @@ input:focus, select:focus { outline: 2px solid var(--accent-strong); outline-off
 .btn.primary { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent); }
 .link { background: none; border: 0; color: var(--accent-strong); cursor: pointer; padding: 0; min-height: 32px; font: inherit; align-self: flex-start; }
 
-.detected { display: flex; align-items: center; gap: 6px; color: var(--slate); font-size: 12px; font-weight: 600; }
+.detected { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 600; }
 .detected .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); }
 .hero { display: flex; gap: 12px; }
 .hero-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -65,7 +65,7 @@ input:focus, select:focus { outline: 2px solid var(--accent-strong); outline-off
 .cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .bar { height: 5px; background: var(--surface-3); border-radius: 99px; overflow: hidden; }
 .bar > div { height: 100%; background: var(--accent); border-radius: 99px; transition: width .35s ease; }
-.airing { align-self: flex-start; padding: 2px 8px; border-radius: 6px; background: var(--orange); color: var(--navy); font-weight: 700; }
+.airing { align-self: flex-start; padding: 2px 8px; border-radius: 6px; background: var(--orange); color: #002B5B; font-weight: 700; }
 
 .stepper { display: flex; align-items: center; border: 1px solid var(--border-2); border-radius: 12px; overflow: hidden; }
 .stepper button { width: 40px; height: 44px; border: 0; background: var(--surface-2); color: var(--text); font: inherit; font-size: 18px; cursor: pointer; }
@@ -75,18 +75,18 @@ input:focus, select:focus { outline: 2px solid var(--accent-strong); outline-off
 .done { display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 12px; border-radius: 12px; background: var(--navy); color: var(--cream); font-size: 13px; font-weight: 600; }
 .done .link { color: var(--cream); text-decoration: underline; min-height: 40px; padding: 0 8px; align-self: center; }
 
-.suggestions { list-style: none; margin: 0; padding: 4px; background: #FFFFFF; border: 1px solid var(--border-2); border-radius: 12px; max-height: 220px; overflow-y: auto; }
+.suggestions { list-style: none; margin: 0; padding: 4px; background: var(--surface-2); border: 1px solid var(--border-2); border-radius: 12px; max-height: 220px; overflow-y: auto; }
 .suggestions button { display: flex; gap: 10px; width: 100%; padding: 6px; background: none; border: 0; border-radius: 8px; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
 .suggestions button:hover { background: var(--surface-2); }
 .suggestions img, .linked img { width: 30px; height: 42px; object-fit: cover; border-radius: 5px; background: var(--surface-2); flex-shrink: 0; }
 .suggestions .info { display: flex; flex-direction: column; min-width: 0; }
 .suggestions strong { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.linked { display: flex; align-items: center; gap: 8px; background: #FFFFFF; border: 1px solid var(--accent-strong); border-radius: 10px; padding: 6px; }
+.linked { display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid var(--accent-strong); border-radius: 10px; padding: 6px; }
 
 .list-section { display: flex; flex-direction: column; gap: 6px; }
 .list-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .list-head h2 { font-family: Inter, system-ui, sans-serif; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
-.search { display: flex; align-items: center; gap: 6px; padding: 0 8px; background: #FFFFFF; border: 1px solid var(--border-2); border-radius: 10px; color: var(--muted); width: 160px; }
+.search { display: flex; align-items: center; gap: 6px; padding: 0 8px; background: var(--surface-2); border: 1px solid var(--border-2); border-radius: 10px; color: var(--muted); width: 160px; }
 .search input { border: 0; background: transparent; min-height: 34px; padding: 0; }
 .search input:focus { outline: none; }
 .search:focus-within { outline: 2px solid var(--accent-strong); outline-offset: -1px; }
@@ -111,3 +111,21 @@ input:focus, select:focus { outline: 2px solid var(--accent-strong); outline-off
 .settings summary { cursor: pointer; font-weight: 600; font-size: .85rem; min-height: 28px; display: flex; align-items: center; }
 .settings label.check { display: flex; gap: 8px; align-items: flex-start; font-size: .8rem; line-height: 1.35; }
 .settings label.check input { flex: none; margin-top: 1px; }
+
+/* ---------- Modo oscuro (igual que la web) ---------- */
+:root {
+  color-scheme: dark;
+  --navy: #16335E;
+  --bg: #0A1322; --surface: #101C31; --surface-2: #16243D; --surface-3: #1E2F4D;
+  --border: rgba(249, 245, 235, .08); --border-2: rgba(249, 245, 235, .15);
+  --text: #F4EFE3; --text-2: #CAD2E0; --muted: #94A1B7;
+  --accent: #EA5455; --accent-strong: #F06A6C; --on-accent: #FFFFFF;
+  --ok: #7FD1A8; --danger: #FF8A8B; --fav: var(--orange);
+}
+.top { background: rgba(16, 28, 49, .96); border-bottom: 1px solid var(--border); }
+.brand-mark { background: #C73E40; }
+.card { box-shadow: none; border-radius: 16px; }
+input, select { background: var(--surface-2) !important; color: var(--text) !important; border-color: var(--border-2) !important; }
+.btn.primary, button.primary { background: #C73E40 !important; border-color: #C73E40 !important; color: #fff !important; }
+.perm { display: flex; gap: 10px; align-items: center; margin: 12px 16px 0; padding: 10px 12px; border-radius: 14px; background: #14305A; color: var(--text); }
+.perm .btn { flex: none; min-height: 34px; padding: 0 12px; border-radius: 10px; border: 0; font: inherit; font-weight: 600; cursor: pointer; }

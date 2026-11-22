@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ZebaniTracker",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Reconoce el anime y el capítulo que ves, lo marca solo al terminar y te propone agregarlo a tu ZebaniTracker.",
   "action": {
     "default_popup": "popup.html",
@@ -26,10 +26,15 @@
   "host_permissions": [
     "https://zebanitracker-api.vercel.app/*",
     "http://localhost:4000/*",
-    "https://ccztpoqpgplnknhsrbbp.supabase.co/*"
+    "https://ccztpoqpgplnknhsrbbp.supabase.co/*",
+    "https://*/*",
+    "http://*/*"
   ],
   "background": {
     "service_worker": "background.js",
+    "scripts": [
+      "background.js"
+    ],
     "type": "module"
   },
   "content_scripts": [
@@ -44,5 +49,17 @@
       "all_frames": true,
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "zebanitracker@sebcarabali.github.io",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "authenticationInfo",
+          "websiteActivity"
+        ]
+      }
+    }
+  }
 }

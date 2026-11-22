@@ -174,6 +174,16 @@ Se despliega en Vercel con el preset Next.js. Las variables `NEXT_PUBLIC_*` se i
 3. Abre `chrome://extensions`, activa **Modo desarrollador** → **Cargar descomprimida** → selecciona la carpeta `extension/`.
 4. Inicia sesión en el popup con tu correo y contraseña (las cuentas se crean desde la web).
 
+### Firefox (v1.7)
+
+El mismo código funciona en Chrome y Firefox (Firefox 140 o superior): el manifiesto declara `background.service_worker` (Chrome) y `background.scripts` (Firefox), y un id de complemento en `browser_specific_settings.gecko`.
+
+- **Probar:** abre `about:debugging#/runtime/this-firefox` → **Cargar complemento temporal…** → elige `extension/manifest.json` (o el .zip). Queda instalado hasta que cierres Firefox.
+- **Permiso de sitios:** en Manifest V3, Firefox puede pedir aparte el acceso a las páginas. Si el popup muestra “Permitir”, púlsalo (o en `about:addons` → ZebaniTracker → Permisos → acceso a todos los sitios) para que reconozca los capítulos.
+- **Notificaciones:** Firefox no admite botones en las notificaciones; la acción principal se hace **haciendo clic** en la notificación (marcar, deshacer, agregar). “¿Lo retomas o lo dejas?” abre la web, donde están los dos botones.
+- **Instalación permanente gratis:** sube el .zip a [addons.mozilla.org](https://addons.mozilla.org/developers/) como **“En tu propio sitio” (unlisted)**; Mozilla lo firma sin publicarlo y te da un `.xpi` que instalas arrastrándolo a Firefox. Alternativa: `npx web-ext sign --channel=unlisted` con tus claves de API de AMO.
+- Comprobación: `npx web-ext lint --source-dir extension --self-hosted` (0 errores).
+
 Seguimiento automático (v1.6):
 - Reconoce anime y capítulo por la URL en **JKAnime**, **AnimeFLV**, **TioAnime**, **MonosChinos**, **AnimeAV1**, **HiAnime/AniWatch** y, en cualquier otro sitio (Crunchyroll, etc.), por el título de la pestaña (“Episodio 12”).
 - El icono muestra **✓** (o el número de capítulo) si el anime está en tu lista y **+** si no lo tienes.

@@ -3,9 +3,9 @@ import { getSession } from './lib/auth.js';
 import { api } from './lib/api.js';
 import { detectPage, matchPage } from './lib/detect.js';
 import { getSettings as settings } from './lib/settings.js';
+import { IS_FIREFOX, notify } from './lib/notify.js';
 
 const ALARM = 'check-episodes';
-const ICON = 'icons/icon128.png';
 const DAY = 86_400_000;
 
 
@@ -33,9 +33,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       // Primera vez que vemos este anime: solo guardamos el estado, sin avisar de capítulos viejos
       if (already === undefined) { next[a.id] = a.aired_episodes; continue; }
       if (a.aired_episodes > already && a.aired_episodes > a.watched_episodes) {
-        chrome.notifications.create(`new:${a.id}`, {
-          type: 'basic',
-          iconUrl: ICON,
+        notify(`new:${a.id}`, {
           title: `Nuevo capítulo de ${a.title}`,
           message: `Ya salió el cap. ${a.aired_episodes}. Vas en el ${a.watched_episodes}.`,
           priority: 1,
@@ -60,13 +58,12 @@ async function staleReminders() {
   const asked = { ...staleAsked };
   for (const a of items.filter((x) => Date.now() - (staleAsked[x.id] ?? 0) > 7 * DAY).slice(0, 2)) {
     asked[a.id] = Date.now();
-    chrome.notifications.create(`stale:${a.id}`, {
-      type: 'basic',
-      iconUrl: ICON,
+    notify(`stale:${a.id}`, {
       title: `¿Retomas ${a.title} o lo dejas?`,
       message: `Vas en el cap. ${a.watched_episodes} y no avanzas hace ${a.idle_days} días.`,
       buttons: [{ title: '▶ Lo retomo' }, { title: '✕ Lo dejo' }],
       requireInteraction: true,
+      clickHint: 'Haz clic para retomarlo o dejarlo en la web',
     });
   }
   await chrome.storage.local.set({ staleAsked: asked });
@@ -141,13 +138,12 @@ async function handleVideoDone(tab) {
     const episode = d.episode ?? 1;
     const id = `add:${media.anilist_id}:${Date.now()}`;
     await chrome.storage.session.set({ [id]: { media, episode, url, jk: d.jk } });
-    chrome.notifications.create(id, {
-      type: 'basic',
-      iconUrl: ICON,
+    notify(id, {
       title: `¿Agregar ${media.title} a tu lista?`,
       message: `Terminaste el cap. ${episode} y no lo tienes en ZebaniTracker.`,
       buttons: [{ title: `Agregar y marcar cap. ${episode}` }, { title: 'No es este anime' }],
       requireInteraction: true,
+      clickHint: `Haz clic para agregarlo y marcar el cap. ${episode}`,
     });
     return;
   }
@@ -163,44 +159,50 @@ async function handleVideoDone(tab) {
       listCache.at = 0;
       const id = `auto:${anime.id}:${Date.now()}`;
       await chrome.storage.session.set({ [id]: { animeId: anime.id, prev: before } });
-      chrome.notifications.create(id, {
-        type: 'basic',
-        iconUrl: ICON,
+      notify(id, {
         title: `✓ Cap. ${episode} marcado`,
         message: updated.status === 'completed' ? `${updated.title}: ¡terminado! 🎉` : `${updated.title}: vas en el cap. ${updated.watched_episodes}`,
         buttons: [{ title: 'Deshacer' }],
+        clickHint: 'Haz clic para deshacer',
       });
       updateBadge(tab).catch(() => {});
     } catch (e) {
-      chrome.notifications.create({ type: 'basic', iconUrl: ICON, title: 'No se pudo marcar', message: e.message });
+      notify(null, { title: 'No se pudo marcar', message: e.message });
     }
     return;
   }
 
   const id = `mark:${anime.id}:${episode}:${Date.now()}`;
   await chrome.storage.session.set({ [id]: { animeId: anime.id, title: anime.title, episode, url } });
-  chrome.notifications.create(id, {
-    type: 'basic',
-    iconUrl: ICON,
+  notify(id, {
     title: `¿Terminaste el cap. ${episode}?`,
     message: anime.title,
     buttons: [{ title: `Marcar cap. ${episode} como visto` }, { title: 'Ahora no' }],
     requireInteraction: true,
+    clickHint: `Haz clic para marcar el cap. ${episode} como visto`,
   });
 }
 
-chrome.notifications.onButtonClicked.addListener(async (id, button) => {
+chrome.notifications.onButtonClicked.addListener((id, button) => { handleAction(id, button); });
+
+/** Acción de una notificación: botón en Chrome, o clic (= primer botón) en Firefox. */
+async function handleAction(id, button) {
   const kind = id.split(':')[0];
   if (kind === 'stale') {
     chrome.notifications.clear(id);
     const animeId = id.slice(6);
+    if (IS_FIREFOX) {
+      // Sin botones: la web muestra "Lo retomo / Lo dejo"
+      chrome.tabs.create({ url: `${CONFIG.WEB_URL}/` });
+      return;
+    }
     try {
       await api.staleAction(animeId, button === 0 ? 'resume' : 'drop');
       listCache.at = 0;
       if (button === 0) chrome.tabs.create({ url: `${CONFIG.WEB_URL}/animes/${animeId}` });
-      else chrome.notifications.create({ type: 'basic', iconUrl: ICON, title: 'Marcado como abandonado', message: 'Puedes retomarlo cuando quieras desde tu lista.' });
+      else notify(null, { title: 'Marcado como abandonado', message: 'Puedes retomarlo cuando quieras desde tu lista.' });
     } catch (e) {
-      chrome.notifications.create({ type: 'basic', iconUrl: ICON, title: 'No se pudo guardar', message: e.message });
+      notify(null, { title: 'No se pudo guardar', message: e.message });
     }
     return;
   }
@@ -213,7 +215,7 @@ chrome.notifications.onButtonClicked.addListener(async (id, button) => {
     if (kind === 'auto') {
       const updated = await api.setProgress(pending.animeId, pending.prev);
       listCache.at = 0;
-      chrome.notifications.create({ type: 'basic', iconUrl: ICON, title: 'Deshecho', message: `${updated.title}: vuelves al cap. ${updated.watched_episodes}` });
+      notify(null, { title: 'Deshecho', message: `${updated.title}: vuelves al cap. ${updated.watched_episodes}` });
       return;
     }
     if (kind === 'add') {
@@ -228,26 +230,26 @@ chrome.notifications.onButtonClicked.addListener(async (id, button) => {
         last_episode_url: pending.url,
       });
       listCache.at = 0;
-      chrome.notifications.create(`open:${created.id}`, {
-        type: 'basic', iconUrl: ICON, title: '✓ Agregado a tu lista',
+      notify(`open:${created.id}`, {
+        title: '✓ Agregado a tu lista',
         message: `${created.title}: vas en el cap. ${created.watched_episodes}`,
       });
       return;
     }
     const updated = await api.setProgress(pending.animeId, pending.episode, pending.url);
     listCache.at = 0;
-    chrome.notifications.create({
-      type: 'basic', iconUrl: ICON,
+    notify(null, {
       title: '✓ Capítulo marcado',
       message: `${updated.title}: vas en el cap. ${updated.watched_episodes}`,
     });
   } catch (e) {
-    chrome.notifications.create({ type: 'basic', iconUrl: ICON, title: 'No se pudo guardar', message: e.message });
+    notify(null, { title: 'No se pudo guardar', message: e.message });
   }
-});
+}
 
 chrome.notifications.onClicked.addListener((id) => {
   const [kind, animeId] = id.split(':');
+  if (IS_FIREFOX && ['mark', 'auto', 'add', 'stale'].includes(kind)) { handleAction(id, 0); return; }
   if (kind === 'new' || kind === 'open' || kind === 'stale') {
     chrome.tabs.create({ url: `${CONFIG.WEB_URL}/animes/${animeId}` });
     chrome.notifications.clear(id);

@@ -366,3 +366,12 @@ async function renderSettings() {
     input.onchange = () => setSetting(key, input.checked).then(() => msg('Ajuste guardado'));
   }
 }
+
+/* ---------- Permiso de sitios (Firefox lo pide aparte en Manifest V3) ---------- */
+const SITE_ORIGINS = ['https://*/*', 'http://*/*'];
+chrome.permissions.contains({ origins: SITE_ORIGINS }).then((ok) => show($('perm'), !ok)).catch(() => {});
+$('grant').addEventListener('click', async () => {
+  const ok = await chrome.permissions.request({ origins: SITE_ORIGINS }).catch(() => false);
+  show($('perm'), !ok);
+  if (ok) msg('Listo: ahora la extensión reconoce los capítulos en las páginas');
+});
