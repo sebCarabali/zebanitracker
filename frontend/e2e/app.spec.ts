@@ -177,3 +177,14 @@ test('sinopsis traducida con IA y opción de ver el original', async ({ page, ap
   await page.getByRole('button', { name: 'Ver original (inglés)' }).click();
   await expect(page.locator('.synopsis')).toHaveText('The adventure is over.');
 });
+
+test('si la IA responde vacío o incompleto, Mi lista no se rompe', async ({ page, api }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  api.on('GET', /^\/ai\/recommendations$/, () => ({}));
+  api.on('POST', /^\/ai\/recommendations$/, () => ({}));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Mi biblioteca' })).toBeVisible();
+  await expect(page.locator('section.ai-section')).toContainText('Pulsa “Otras recomendaciones”');
+  expect(errors).toEqual([]);
+});

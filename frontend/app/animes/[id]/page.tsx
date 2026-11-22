@@ -11,6 +11,7 @@ import { NextLinks } from '@/components/AnimeCard';
 import { WatchLinks } from '@/components/WatchLinks';
 import { SeasonsPanel } from '@/components/SeasonsPanel';
 import { Synopsis } from '@/components/Synopsis';
+import { SafeBoundary } from '@/components/SafeBoundary';
 import { Stars } from '@/components/Stars';
 
 const RING_R = 56;
@@ -212,7 +213,7 @@ export default function AnimeDetailPage() {
               <h2 style={{ fontSize: '1.35rem' }}>Sinopsis</h2>
               <Link href={`/explore/${details.anilist_id}`} className="small">Ver ficha completa →</Link>
             </div>
-            <Synopsis anilistId={details.anilist_id} original={details.description} clamp={420} />
+            <SafeBoundary name="sinopsis" fallback={<p className="synopsis">{details.description}</p>}><Synopsis anilistId={details.anilist_id} original={details.description} clamp={420} /></SafeBoundary>
             <dl className="info-list" style={{ marginTop: 4 }}>
               {([
                 ['Formato', details.format ? FORMAT_LABELS[details.format] ?? details.format : null],
@@ -224,7 +225,7 @@ export default function AnimeDetailPage() {
             </dl>
           </section>
         )}
-        {anime.anilist_id && <SeasonsPanel key={anime.anilist_id} currentAnilistId={anime.anilist_id} />}
+        {anime.anilist_id && <SafeBoundary name="temporadas"><SeasonsPanel key={anime.anilist_id} currentAnilistId={anime.anilist_id} /></SafeBoundary>}
         </div>
 
         <aside className="detail-side">

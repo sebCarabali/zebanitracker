@@ -7,6 +7,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { AnimeCard, ContinueCard, SeasonGroup } from '@/components/AnimeCard';
 import { Cover } from '@/components/Cover';
 import { AiRecommendations } from '@/components/AiRecommendations';
+import { SafeBoundary } from '@/components/SafeBoundary';
 import { SearchIcon } from '@/components/Icons';
 import { streaks } from '@/lib/activity';
 
@@ -213,7 +214,9 @@ export default function HomePage() {
       )}
 
       {!loading && !offline && (
-        <AiRecommendations hasAnimes={animes.length > 0} onAdded={(a) => setAnimes((l) => [a, ...l])} />
+        <SafeBoundary name="IA">
+          <AiRecommendations hasAnimes={animes.length > 0} onAdded={(a) => setAnimes((l) => [a, ...l])} />
+        </SafeBoundary>
       )}
 
       {discover && discover.sequels.length > 0 && (

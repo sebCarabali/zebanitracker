@@ -157,9 +157,10 @@ export interface AiRecommendations {
   summary: string;
   request: string | null;
   items: { media: CatalogAnime; reason: string }[];
-  generated_at: string;
+  generated_at: string | null;
   lang: string;
   stale?: boolean;
+  empty?: boolean;
   note?: string;
 }
 

@@ -19,11 +19,16 @@ export function AiRecommendations({ hasAnimes, onAdded }: { hasAnimes: boolean; 
   const [ask, setAsk] = useState('');
   const [added, setAdded] = useState<Set<number>>(new Set());
 
+  /** Normaliza la respuesta: sin lista válida se trata como "sin recomendaciones". */
+  const normalize = (r: Partial<Recs> | null | undefined): Recs | null =>
+    r && Array.isArray(r.items) ? (r as Recs) : null;
+
   async function generate(body: { request?: string; refresh?: boolean } = {}) {
     setGenerating(true);
     setError(null);
     try {
-      setRecs(await api.generateAiRecommendations(body));
+      const r = await api.generateAiRecommendations(body);
+      setRecs(normalize(r) ?? { summary: '', request: null, items: [], generated_at: '', lang: 'es', note: (r as Recs | null)?.note });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -35,11 +40,12 @@ export function AiRecommendations({ hasAnimes, onAdded }: { hasAnimes: boolean; 
     if (!hasAnimes) { setLoading(false); return; }
     let cancelled = false;
     api.aiRecommendations()
-      .then((r) => {
+      .then((raw) => {
         if (cancelled) return;
-        setRecs(r);
+        const r = normalize(raw);
+        setRecs(r?.items.length ? r : null);
         // Primera vez o recomendaciones viejas: se generan solas
-        if (!r || r.stale) generate({ refresh: !!r?.stale });
+        if (!r?.items.length || r.stale) generate({ refresh: !!r?.items.length });
       })
       .catch(() => {})
       .finally(() => !cancelled && setLoading(false));
@@ -84,11 +90,11 @@ export function AiRecommendations({ hasAnimes, onAdded }: { hasAnimes: boolean; 
       </div>
 
       {error && <p className="banner" style={{ background: 'var(--accent-strong)' }}>{error}</p>}
-      {(loading || (generating && !recs?.items.length)) ? (
+      {(loading || (generating && !recs?.items?.length)) ? (
         <div className="ai-grid" aria-label="Generando recomendaciones">
           {[0, 1, 2, 3].map((i) => <div key={i} className="ai-card"><div className="skeleton" style={{ flex: 1 }}><i /><i /><i style={{ width: '60%' }} /></div></div>)}
         </div>
-      ) : recs?.items.length ? (
+      ) : recs?.items?.length ? (
         <>
           {recs.summary && <p className="ai-summary">{recs.request ? `“${recs.request}”: ` : ''}{recs.summary}</p>}
           <div className="ai-grid" style={{ opacity: generating ? 0.5 : 1 }}>

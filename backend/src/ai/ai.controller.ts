@@ -80,7 +80,10 @@ export class AiController {
   @Get('recommendations')
   async cached(@AccessToken() token: string) {
     const p = await this.profile(token);
-    if (!p.recs) return null;
+    if (!p.recs?.items) {
+      // Aún no hay recomendaciones guardadas: respuesta vacía explícita (no "null", que llega como cuerpo vacío)
+      return { summary: '', request: null, items: [], generated_at: null, lang: p.language, stale: true, empty: true };
+    }
     const list = await this.animes.list(token, {});
     const inList = new Set(list.map((a) => a.anilist_id));
     return {
