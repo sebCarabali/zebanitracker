@@ -148,3 +148,28 @@ test('resumen del mes y tarjeta para compartir', async ({ page, api }) => {
   await box.getByRole('button', { name: '🖼 Compartir mi mes' }).click();
   await expect(box.getByAltText('Vista previa de la imagen para compartir')).toBeVisible({ timeout: 15_000 });
 });
+
+test('celular: barra inferior y el resto de secciones en el menú de la cuenta', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.getByRole('navigation', { name: 'Principal' })).toBeHidden();
+  const bar = page.getByRole('navigation', { name: 'Navegación rápida' });
+  await expect(bar).toBeVisible();
+  await bar.getByRole('link', { name: 'Planeo ver' }).click();
+  await expect(page).toHaveURL(/\/plan$/);
+  await page.getByRole('button', { name: 'Cuenta y más secciones' }).click();
+  await page.getByRole('link', { name: 'Amigos' }).click();
+  await expect(page).toHaveURL(/\/friends$/);
+  // Nada se desborda horizontalmente
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('modo oscuro por defecto y se puede cambiar a claro', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.getByRole('button', { name: 'Cuenta y más secciones' }).click();
+  await page.getByRole('switch', { name: /Modo oscuro/ }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+});

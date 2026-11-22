@@ -37,6 +37,7 @@ export default function ExplorePage() {
   const [adding, setAdding] = useState<number | null>(null);
   const [tagInput, setTagInput] = useState('');
   const [aiMode, setAiMode] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const media: MediaType = filters.media ?? 'anime';
   const isAnime = media === 'anime';
   const requestId = useRef(0);
@@ -193,7 +194,10 @@ export default function ExplorePage() {
       {!aiMode && (
 
       <div className="explore">
-        <aside className="filters">
+        <button type="button" className="btn filters-toggle" aria-expanded={showFilters} onClick={() => setShowFilters((v) => !v)}>
+          {showFilters ? 'Ocultar filtros' : `Formato, géneros y etiquetas${activeCount ? ` (${activeCount})` : ''}`}
+        </button>
+        <aside className={`filters ${showFilters ? 'open' : ''}`}>
           {FORMATS_BY_MEDIA[media].length > 0 && <fieldset className="chips">
             <legend className="section-label">Formato</legend>
             {FORMATS_BY_MEDIA[media].map((v) => (

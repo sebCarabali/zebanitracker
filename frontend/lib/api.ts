@@ -389,11 +389,12 @@ export const api = {
 };
 
 export const STATUS_COLORS: Record<AnimeStatus, string> = {
-  watching: '#F07B3F',
-  completed: '#2D4059',
-  plan_to_watch: '#9AA4B4',
-  on_hold: '#D9A21B',
-  dropped: '#EA5455',
+  // Variables CSS: cambian con el tema (claro / oscuro)
+  watching: 'var(--watching)',
+  completed: 'var(--completed)',
+  plan_to_watch: 'var(--plan)',
+  on_hold: 'var(--hold)',
+  dropped: 'var(--dropped)',
 };
 
 /** "en 3 días", "mañana", "en 5 h" */

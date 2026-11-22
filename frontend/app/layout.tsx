@@ -11,12 +11,19 @@ export const metadata: Metadata = {
   icons: { icon: '/icon-192.png', apple: '/apple-touch-icon.png' },
 };
 
-export const viewport: Viewport = { themeColor: '#002B5B' };
+export const viewport: Viewport = {
+  themeColor: '#0A1322',
+  viewportFit: 'cover', width: 'device-width', initialScale: 1,
+};
+
+/** Aplica el tema guardado antes de pintar (oscuro por defecto) para que no parpadee. */
+const THEME_SCRIPT = `try{var t=localStorage.getItem('zt-theme');document.documentElement.dataset.theme=t==='light'?'light':'dark'}catch(e){document.documentElement.dataset.theme='dark'}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
+    <html lang="es" data-theme="dark" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}

@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'Lleva el control de los animes que ves',
     start_url: '/',
     display: 'standalone',
-    background_color: '#F9F5EB',
-    theme_color: '#002B5B',
+    background_color: '#0A1322',
+    theme_color: '#0A1322',
     lang: 'es',
     icons: [
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
