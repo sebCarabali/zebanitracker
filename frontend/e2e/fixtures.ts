@@ -68,6 +68,9 @@ export const test = base.extend<{ api: { calls: { method: string; path: string; 
       }
       const one = path.match(/^\/animes\/(\w+)$/);
       if (one && req.method() === 'GET') return json(route, list.find((a) => a.id === one[1]));
+      if (path === '/ai/recommendations' && req.method() === 'GET') return json(route, null);
+      if (path === '/ai/recommendations') return json(route, { summary: 'Te gusta la fantasía tranquila.', request: null, items: [], generated_at: new Date().toISOString(), lang: 'es' });
+      if (path.startsWith('/ai/description/')) return json(route, { lang: 'es', text: 'Sinopsis en español.', original: 'Synopsis.', translated: true });
       if (path.startsWith('/catalog/filters')) return json(route, { genres: ['Action', 'Fantasy'], tags: [{ name: 'Magic', category: 'Theme' }] });
       if (path.startsWith('/catalog/browse')) return json(route, { results: [], page: 1, hasNextPage: false, total: 0 });
       return json(route, {});

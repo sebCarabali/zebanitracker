@@ -19,6 +19,10 @@ zebanitracker/
 - Reglas automáticas: llegar al último capítulo → *Completado*; marcar *Completado* rellena el progreso; no se puede superar el total.
 - **Calendario** (`/calendar`): estrenos de los próximos 7 días y capítulos ya emitidos que aún no ves.
 - **Puntuación (1-10) y reseña** por anime; orden de la biblioteca por recientes, título, progreso, puntuación o próximo estreno.
+- **IA** (Vercel AI Gateway, modelo `anthropic/claude-haiku-5.5`, configurable con `AI_MODEL`):
+  - **Recomendado por IA** en Mi lista: usa tu historial, puntuaciones, favoritos, abandonos y los gustos que escribas en Ajustes. La IA solo elige entre candidatos reales de AniList (recomendaciones de la comunidad, mejor valorados en tus géneros y la temporada actual) y explica por qué cada uno encaja contigo. También acepta pedidos puntuales ("algo corto de misterio").
+  - **Sinopsis traducidas** al idioma de tu perfil (por defecto español), con opción de ver el original. Se guardan para no traducir dos veces.
+  - Autenticación: en Vercel usa el token OIDC de cada petición (no hace falta clave); en local, `AI_GATEWAY_API_KEY`. Límites por usuario: 15 recomendaciones y 150 traducciones al día.
 - **Temporadas**: cada anime se vincula a su franquicia siguiendo precuelas/secuelas de AniList (`franchise_id`, `season_number`). Panel "Temporadas" en el detalle y en las fichas (temporadas, películas y extras en orden, tu estado en cada una, agregar las que faltan, "¿Seguimos con la Temporada N?" al terminar una), y opción "Agrupar temporadas" en Mi lista con el avance de toda la serie.
 - **Ver en JKAnime**: botones "Ver cap. N en JKAnime" y "Buscar en JKAnime", y selector "Ir al capítulo" en el detalle. El enlace usa el slug del anime (`{dominio}/{slug}/{n}/`): se aprende de la página pegada en *Dónde lo veo* o desde la que marcaste un capítulo; si no hay, se deriva del título en romaji. El dominio se cambia en Ajustes (web) y en `extension/config.js` → `WATCH_BASE`. La extensión reconoce anime y capítulo directamente de la URL de JKAnime.
 - **Continuar con un clic**: al marcar desde la extensión se guarda la página del capítulo y se ofrece "Abrir cap. N+1" (adivina la URL).
@@ -117,6 +121,9 @@ Se despliega en Vercel con el preset **NestJS** (entrada `src/main.ts`).
 | PUT / DELETE | `/api/profile/anilist` `{ "token" }` | Conectar / desconectar AniList |
 | GET | `/api/public/:username` | Lista pública (sin sesión) |
 | GET | `/api/cron/notify` | Tarea diaria de correos (Vercel Cron, `CRON_SECRET`) |
+| GET / POST | `/api/ai/recommendations` `{ "request"?, "refresh"? }` | Recomendaciones con IA (GET = guardadas, POST = generar) |
+| GET | `/api/ai/description/:anilistId?lang=es` | Sinopsis traducida con IA |
+| GET | `/api/health/ai` | Comprueba que la IA responde (público, limitado) |
 | GET | `/api/health` | Healthcheck (público) |
 | GET | `/api/health/anilist` | Verifica la conexión con AniList (público) |
 

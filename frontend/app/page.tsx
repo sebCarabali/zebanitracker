@@ -6,6 +6,7 @@ import { api, Anime, AnimeStatus, currentSeason, Discover, SEASON_LABELS, WatchE
 import { useAuth } from '@/components/AuthProvider';
 import { AnimeCard, ContinueCard, SeasonGroup } from '@/components/AnimeCard';
 import { Cover } from '@/components/Cover';
+import { AiRecommendations } from '@/components/AiRecommendations';
 import { SearchIcon } from '@/components/Icons';
 import { streaks } from '@/lib/activity';
 
@@ -211,6 +212,10 @@ export default function HomePage() {
         </section>
       )}
 
+      {!loading && !offline && (
+        <AiRecommendations hasAnimes={animes.length > 0} onAdded={(a) => setAnimes((l) => [a, ...l])} />
+      )}
+
       {discover && discover.sequels.length > 0 && (
         <section>
           <div className="section-head">
@@ -228,7 +233,7 @@ export default function HomePage() {
       {discover && discover.recommendations.length > 0 && (
         <section>
           <div className="section-head">
-            <h2>Para ti</h2>
+            <h2>Similares a lo que ves</h2>
             <Link href={`/explore?season=${season.season}&year=${season.year}`} className="small">
               Ver estrenos de {SEASON_LABELS[season.season].toLowerCase()} {season.year} →
             </Link>

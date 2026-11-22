@@ -10,6 +10,7 @@ import { BackIcon, PlayIcon, RefreshIcon, StarIcon } from '@/components/Icons';
 import { NextLinks } from '@/components/AnimeCard';
 import { WatchLinks } from '@/components/WatchLinks';
 import { SeasonsPanel } from '@/components/SeasonsPanel';
+import { Synopsis } from '@/components/Synopsis';
 import { Stars } from '@/components/Stars';
 
 const RING_R = 56;
@@ -27,7 +28,6 @@ export default function AnimeDetailPage() {
   const [details, setDetails] = useState<AnimeDetails | null>(null);
   const [review, setReview] = useState('');
   const [reviewSaved, setReviewSaved] = useState(false);
-  const [showFull, setShowFull] = useState(false);
 
   // Ficha de AniList (sinopsis, estudio…) para los animes vinculados
   useEffect(() => {
@@ -212,12 +212,7 @@ export default function AnimeDetailPage() {
               <h2 style={{ fontSize: '1.35rem' }}>Sinopsis</h2>
               <Link href={`/explore/${details.anilist_id}`} className="small">Ver ficha completa →</Link>
             </div>
-            <p className="synopsis">
-              {showFull || details.description.length <= 420 ? details.description : `${details.description.slice(0, 420).trim()}…`}
-            </p>
-            {details.description.length > 420 && (
-              <button className="link" onClick={() => setShowFull((v) => !v)}>{showFull ? 'Ver menos' : 'Leer más'}</button>
-            )}
+            <Synopsis anilistId={details.anilist_id} original={details.description} clamp={420} />
             <dl className="info-list" style={{ marginTop: 4 }}>
               {([
                 ['Formato', details.format ? FORMAT_LABELS[details.format] ?? details.format : null],

@@ -7,5 +7,6 @@ import { AniListModule } from '../anilist/anilist.module.js';
   imports: [AniListModule],
   controllers: [AnimesController],
   providers: [AnimesService],
+  exports: [AnimesService],
 })
 export class AnimesModule {}

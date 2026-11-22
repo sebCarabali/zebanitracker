@@ -12,6 +12,7 @@ import { Cover } from '@/components/Cover';
 import { BackIcon, CheckIcon, PlayIcon, PlusIcon } from '@/components/Icons';
 import { WatchLinks } from '@/components/WatchLinks';
 import { SeasonsPanel } from '@/components/SeasonsPanel';
+import { Synopsis } from '@/components/Synopsis';
 
 export default function CatalogDetailPage() {
   const { anilistId } = useParams<{ anilistId: string }>();
@@ -115,9 +116,8 @@ export default function CatalogDetailPage() {
           <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <h2 style={{ fontSize: '1.35rem' }}>Sinopsis</h2>
             {anime.description
-              ? <p className="synopsis">{anime.description}</p>
+              ? <Synopsis anilistId={anime.anilist_id} original={anime.description} />
               : <p className="muted" style={{ margin: 0 }}>AniList aún no tiene sinopsis para este anime.</p>}
-            <p className="muted small" style={{ margin: 0 }}>Sinopsis en inglés tomada de AniList.</p>
           </section>
 
           {(anime.genres.length > 0 || anime.tags.length > 0) && (

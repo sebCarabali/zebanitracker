@@ -152,12 +152,29 @@ export interface ImportResult {
 export interface FranchiseEntry { media: CatalogAnime; start: string | null; season_number: number | null; label: string }
 export interface Franchise { root: number; entries: FranchiseEntry[] }
 
+export interface AiDescription { lang: string; text: string | null; original: string | null; translated: boolean }
+export interface AiRecommendations {
+  summary: string;
+  request: string | null;
+  items: { media: CatalogAnime; reason: string }[];
+  generated_at: string;
+  lang: string;
+  stale?: boolean;
+  note?: string;
+}
+
+export const LANGUAGES: Record<string, string> = {
+  es: 'Español', en: 'English', pt: 'Português', fr: 'Français', it: 'Italiano', de: 'Deutsch', ja: '日本語', ko: '한국어',
+};
+
 export interface WatchEvent { anime_id: string; episode: number; watched_at: string }
 export interface Discover {
   recommendations: { media: CatalogAnime; because: string[]; rating: number }[];
   sequels: { media: CatalogAnime; after: string }[];
 }
 export interface Profile {
+  language: string;
+  ai_preferences: string | null;
   username: string | null;
   is_public: boolean;
   notify_email: boolean;
@@ -225,7 +242,7 @@ export const api = {
     return { blob: await res.blob(), exported: Number(res.headers.get('X-Exported') ?? 0), skipped: Number(res.headers.get('X-Skipped') ?? 0) };
   },
   profile: () => request<Profile>('/profile'),
-  updateProfile: (p: Partial<Pick<Profile, 'username' | 'is_public' | 'notify_email'>>) =>
+  updateProfile: (p: Partial<Pick<Profile, 'username' | 'is_public' | 'notify_email' | 'language' | 'ai_preferences'>>) =>
     request<Profile>('/profile', { method: 'PATCH', body: JSON.stringify(p) }),
   connectAniList: (token: string) => request<Profile>('/profile/anilist', { method: 'PUT', body: JSON.stringify({ token }) }),
   disconnectAniList: () => request<Profile>('/profile/anilist', { method: 'DELETE' }),
@@ -250,6 +267,11 @@ export const api = {
   catalogSeasons: (anilistId: number) => request<Franchise>(`/catalog/anime/${anilistId}/seasons`),
   addMany: (items: { anilist_id: number; status: AnimeStatus }[]) =>
     request<Anime[]>('/animes/batch', { method: 'POST', body: JSON.stringify({ items }) }),
+  aiDescription: (anilistId: number, lang?: string) =>
+    request<AiDescription>(`/ai/description/${anilistId}${lang ? `?lang=${lang}` : ''}`),
+  aiRecommendations: () => request<AiRecommendations | null>('/ai/recommendations'),
+  generateAiRecommendations: (body: { request?: string; refresh?: boolean } = {}) =>
+    request<AiRecommendations>('/ai/recommendations', { method: 'POST', body: JSON.stringify(body) }),
   catalogFilters: () => request<FilterOptions>('/catalog/filters'),
   importAniList: (body: { username: string; statuses?: AniListStatus[]; include_favorites?: boolean }) =>
     request<ImportResult>('/animes/import/anilist', { method: 'POST', body: JSON.stringify(body) }),

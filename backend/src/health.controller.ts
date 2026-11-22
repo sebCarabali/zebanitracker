@@ -1,13 +1,27 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Headers } from '@nestjs/common';
+import { AiService } from './ai/ai.service.js';
 import { AniListService } from './anilist/anilist.service.js';
 
 @Controller('health')
 export class HealthController {
-  constructor(private readonly anilist: AniListService) {}
+  constructor(private readonly anilist: AniListService, private readonly ai: AiService) {}
 
   @Get()
   check() {
     return { ok: true };
+  }
+
+  /** Verifica que la IA responde (traducción mínima). Limitado a 5 por hora para no gastar crédito. */
+  @Get('ai')
+  async aiCheck(@Headers('x-vercel-oidc-token') oidc?: string) {
+    this.ai.limit('health', 'ai', 5 * 24);
+    const started = Date.now();
+    try {
+      const text = await this.ai.translate(oidc, 'The adventure is over but life goes on for an elf mage.', 'es');
+      return { ok: true, model: this.ai.modelId, ms: Date.now() - started, sample: text, auth: process.env.AI_GATEWAY_API_KEY ? 'api-key' : oidc ? 'oidc' : 'none' };
+    } catch (e) {
+      return { ok: false, model: this.ai.modelId, error: (e as Error).message, auth: process.env.AI_GATEWAY_API_KEY ? 'api-key' : oidc ? 'oidc' : 'none' };
+    }
   }
 
   /** Verifica la conexión con AniList (la búsqueda queda en caché 10 min). */

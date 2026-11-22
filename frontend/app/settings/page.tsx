@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { api, Profile } from '@/lib/api';
+import { api, LANGUAGES, Profile } from '@/lib/api';
 import { useAuth } from '@/components/AuthProvider';
 import { DEFAULT_WATCH_BASE, getWatchBase, setWatchBase } from '@/lib/watch';
 
@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [msg, setMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [watchBase, setWatchBaseState] = useState(DEFAULT_WATCH_BASE);
+  const [prefs, setPrefs] = useState('');
   useEffect(() => setWatchBaseState(getWatchBase()), []);
 
   useEffect(() => {
@@ -36,7 +37,7 @@ export default function SettingsPage() {
         .finally(() => setBusy(false));
       return;
     }
-    api.profile().then((p) => { setProfile(p); setUsername(p.username ?? ''); }).catch((e) => setMsg({ type: 'error', text: e.message }));
+    api.profile().then((p) => { setProfile(p); setUsername(p.username ?? ''); setPrefs(p.ai_preferences ?? ''); }).catch((e) => setMsg({ type: 'error', text: e.message }));
   }, [session]);
 
   async function save(patch: Parameters<typeof api.updateProfile>[0], okText: string) {
@@ -68,6 +69,28 @@ export default function SettingsPage() {
           <p className="muted" style={{ marginBottom: 0 }}>{session.user.email}</p>
         </div>
         {msg && <p className={msg.type} role="status" style={{ margin: 0 }}>{msg.text}</p>}
+
+        <section className="panel">
+          <h2 className="section-label">Idioma e IA</h2>
+          <div className="setting">
+            <label className="grow" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <strong>Idioma de las sinopsis y recomendaciones</strong>
+              <span className="muted small">Las sinopsis de AniList (en inglés) se traducen con IA a este idioma.</span>
+              <select value={profile.language} disabled={busy}
+                onChange={(e) => save({ language: e.target.value }, `Idioma: ${LANGUAGES[e.target.value]}`)}>
+                {Object.entries(LANGUAGES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </label>
+          </div>
+          <form className="setting" onSubmit={(e) => { e.preventDefault(); save({ ai_preferences: prefs.trim() || null }, 'Preferencias guardadas: la IA las usará en tus próximas recomendaciones'); }}>
+            <label className="grow" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <strong>Tus gustos, en tus palabras</strong>
+              <span className="muted small">La IA los tiene en cuenta además de tu historial. Ej.: “me encantan los isekai cortos y el misterio; no me gusta el fanservice ni lo muy largo”.</span>
+              <textarea rows={3} maxLength={1000} value={prefs} onChange={(e) => setPrefs(e.target.value)} placeholder="¿Qué te gusta y qué no?" />
+            </label>
+            <button className="btn navy" disabled={busy || prefs.trim() === (profile.ai_preferences ?? '')}>Guardar</button>
+          </form>
+        </section>
 
         <section className="panel">
           <h2 className="section-label">Perfil público</h2>

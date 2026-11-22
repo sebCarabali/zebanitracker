@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class UpdateProfileDto {
@@ -12,6 +12,14 @@ export class UpdateProfileDto {
 
   @IsOptional() @IsBoolean()
   notify_email?: boolean;
+
+  /** Idioma para sinopsis traducidas y textos de la IA. */
+  @IsOptional() @IsIn(['es', 'en', 'pt', 'fr', 'it', 'de', 'ja', 'ko'])
+  language?: string;
+
+  /** Gustos en texto libre para la IA ("me encantan los isekai cortos, odio el fanservice"). */
+  @IsOptional() @IsString() @MaxLength(1000)
+  ai_preferences?: string | null;
 }
 
 export class ConnectAniListDto {

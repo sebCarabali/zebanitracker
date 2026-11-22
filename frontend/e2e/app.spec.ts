@@ -139,3 +139,41 @@ test('panel de temporadas: estado por temporada y agregar las que faltan', async
   await panel.getByRole('button', { name: 'Ver películas y extras' }).click();
   await expect(panel.locator('li', { hasText: 'Película' })).toContainText('Solo Leveling: ReAwakening');
 });
+
+test('recomendaciones con IA: se generan solas, explican el porqué y aceptan pedidos', async ({ page, api }) => {
+  const media = (id: number, title: string) => ({ anilist_id: id, title, title_romaji: title, title_english: title, total_episodes: 12, aired_episodes: 12,
+    cover_url: null, site_url: 'https://anilist.co', format: 'TV', year: 2023, season: 'FALL', airing_status: 'FINISHED', genres: ['Mystery'],
+    score: 85, next_episode_at: null, next_episode: null, mal_id: null, studios: [] });
+  api.on('POST', /^\/ai\/recommendations$/, (_r, _u, body) => {
+    const req = (body as { request?: string }).request;
+    return {
+      summary: req ? 'Tres historias cortas de misterio.' : 'Te gusta la fantasía contemplativa y las historias con buen cierre.',
+      request: req ?? null, generated_at: new Date().toISOString(), lang: 'es',
+      items: [{ media: media(100, req ? 'Odd Taxi' : 'The Apothecary Diaries'), reason: 'Porque puntuaste alto Frieren y te gustan los misterios pausados.' }],
+    };
+  });
+  await page.goto('/');
+  const section = page.locator('section.ai-section');
+  await expect(section).toContainText('Te gusta la fantasía contemplativa');
+  await expect(section.locator('.ai-card')).toContainText('Porque puntuaste alto Frieren');
+  expect(api.calls.some((c) => c.method === 'POST' && c.path === '/ai/recommendations')).toBeTruthy();
+
+  await section.getByPlaceholder(/Qué te apetece/).fill('algo corto de misterio');
+  await section.getByRole('button', { name: 'Pedir' }).click();
+  await expect(section.locator('.ai-card')).toContainText('Odd Taxi');
+  expect(api.calls.filter((c) => c.path === '/ai/recommendations').at(-1)?.body).toEqual({ request: 'algo corto de misterio' });
+});
+
+test('sinopsis traducida con IA y opción de ver el original', async ({ page, api }) => {
+  api.on('GET', /^\/catalog\/anime\/154587$/, () => ({ anilist_id: 154587, title: 'Frieren', title_romaji: 'Sousou no Frieren', title_english: 'Frieren',
+    total_episodes: 28, aired_episodes: 28, cover_url: null, cover_large_url: null, banner_url: null, site_url: 'https://anilist.co', format: 'TV', year: 2023,
+    season: 'FALL', airing_status: 'FINISHED', next_episode_at: null, next_episode: null, genres: ['Adventure'], score: 90, description: 'The adventure is over.',
+    duration: 24, studios: ['MADHOUSE'], source: 'MANGA', start_date: '2023-09-29', end_date: '2024-03-22', popularity: 1, tags: [], trailer_url: null,
+    relations: [], mal_id: 52991 }));
+  api.on('GET', /^\/ai\/description\/154587$/, () => ({ lang: 'es', text: 'La aventura terminó.', original: 'The adventure is over.', translated: true }));
+  await page.goto('/explore/154587');
+  await expect(page.locator('.synopsis')).toHaveText('La aventura terminó.');
+  await expect(page.getByText('✦ Traducido con IA al español')).toBeVisible();
+  await page.getByRole('button', { name: 'Ver original (inglés)' }).click();
+  await expect(page.locator('.synopsis')).toHaveText('The adventure is over.');
+});
