@@ -10,6 +10,7 @@ import { ConnectAniListDto, UpdateProfileDto } from './profile.dto.js';
 interface ProfileRow {
   language: string;
   ai_preferences: string | null;
+  stale_weeks: number;
   username: string | null;
   is_public: boolean;
   notify_email: boolean;
@@ -24,12 +25,13 @@ export class ProfileController {
 
   private async read(token: string) {
     const { data, error } = await this.supabase.forUser(token).from('profiles')
-      .select('username, is_public, notify_email, anilist_username, anilist_token, language, ai_preferences').maybeSingle();
+      .select('username, is_public, notify_email, anilist_username, anilist_token, language, ai_preferences, stale_weeks').maybeSingle();
     if (error) throw new BadRequestException(error.message);
-    const p = (data ?? { username: null, is_public: false, notify_email: false, anilist_username: null, anilist_token: null, language: 'es', ai_preferences: null }) as ProfileRow;
+    const p = (data ?? { username: null, is_public: false, notify_email: false, anilist_username: null, anilist_token: null, language: 'es', ai_preferences: null, stale_weeks: 3 }) as ProfileRow;
     return {
       language: p.language ?? 'es',
       ai_preferences: p.ai_preferences,
+      stale_weeks: p.stale_weeks ?? 3,
       username: p.username,
       is_public: p.is_public,
       notify_email: p.notify_email,

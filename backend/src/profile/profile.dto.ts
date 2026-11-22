@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class UpdateProfileDto {
@@ -20,6 +20,10 @@ export class UpdateProfileDto {
   /** Gustos en texto libre para la IA ("me encantan los isekai cortos, odio el fanservice"). */
   @IsOptional() @IsString() @MaxLength(1000)
   ai_preferences?: string | null;
+
+  /** Semanas sin avanzar para preguntar "¿Lo retomas o lo dejas?". */
+  @IsOptional() @IsInt() @Min(1) @Max(52)
+  stale_weeks?: number;
 }
 
 export class ConnectAniListDto {

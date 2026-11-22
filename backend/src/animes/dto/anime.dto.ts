@@ -51,6 +51,24 @@ export class CreateAnimeDto {
   /** ID del anime en AniList (si se eligió del catálogo). */
   @IsOptional() @IsInt() @Min(1)
   anilist_id?: number | null;
+
+  /** anime, manga o novel (para manga y novelas los "capítulos" son capítulos del libro). */
+  @IsOptional() @IsEnum(['anime', 'manga', 'novel'])
+  media_type?: 'anime' | 'manga' | 'novel';
+
+  @IsOptional() @IsInt() @Min(0)
+  total_volumes?: number | null;
+
+  @IsOptional() @IsInt() @Min(0)
+  watched_volumes?: number;
+
+  /** Etiquetas / listas personalizadas: "Para ver con amigos", "Clásicos"… */
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @Length(1, 30, { each: true })
+  tags?: string[];
+
+  /** Orden en "Planeo ver" (menor = primero). */
+  @IsOptional() @IsInt() @Min(0) @Max(100000)
+  priority?: number | null;
 }
 
 export class UpdateAnimeDto extends PartialType(CreateAnimeDto) {}
@@ -76,6 +94,44 @@ export class ListAnimesQuery {
 
   @IsOptional() @IsString() @MaxLength(100)
   search?: string;
+
+  @IsOptional() @IsEnum(['anime', 'manga', 'novel'])
+  media?: 'anime' | 'manga' | 'novel';
+
+  @IsOptional() @IsString() @MaxLength(30)
+  tag?: string;
+}
+
+export class MarkRangeDto {
+  @IsInt() @Min(1) @Max(5000)
+  from: number;
+
+  @IsInt() @Min(1) @Max(5000)
+  to: number;
+
+  /** Cuándo los viste (ISO). Por defecto, ahora. */
+  @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}/)
+  watched_at?: string;
+}
+
+export class ReorderDto {
+  /** IDs de "Planeo ver" en el orden deseado. */
+  @IsArray() @ArrayMaxSize(1000) @IsString({ each: true })
+  ids: string[];
+}
+
+export class StaleActionDto {
+  @IsEnum(['resume', 'drop', 'snooze'])
+  action: 'resume' | 'drop' | 'snooze';
+}
+
+export class RewatchDto {
+  /** Fecha en que terminaste ese rewatch (ISO). Por defecto, ahora. */
+  @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}/)
+  finished_at?: string;
+
+  @IsOptional() @IsString() @MaxLength(500)
+  note?: string;
 }
 
 export enum AniListStatus {

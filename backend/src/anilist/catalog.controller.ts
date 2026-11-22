@@ -1,7 +1,7 @@
 import { BadRequestException, Controller, Get, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
 import { SupabaseAuthGuard } from '../auth/auth.guard.js';
 import { AniListService } from './anilist.service.js';
-import { BrowseQuery, MediaSort } from './browse.dto.js';
+import { BrowseQuery, MediaKindParam, MediaSort } from './browse.dto.js';
 
 /** Catálogo de AniList (requiere sesión para no agotar el límite de AniList con tráfico anónimo). */
 @Controller('catalog')
@@ -11,10 +11,11 @@ export class CatalogController {
 
   /** Autocompletado rápido por nombre. */
   @Get('search')
-  search(@Query('q') q?: string) {
+  search(@Query('q') q?: string, @Query('media') media?: string) {
     const term = (q ?? '').trim();
     if (term.length < 2 || term.length > 100) throw new BadRequestException('La búsqueda debe tener entre 2 y 100 caracteres');
-    return this.anilist.search(term);
+    const kind = Object.values(MediaKindParam).includes(media as MediaKindParam) ? (media as MediaKindParam) : MediaKindParam.Anime;
+    return this.anilist.search(term, kind);
   }
 
   /** Explorar con filtros: search, genres, tags, year, season, formats, status, sort, page. */

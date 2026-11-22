@@ -34,9 +34,20 @@ export interface Anime {
   franchise_synced_at: string | null;
   last_watched_at: string | null;
   completed_at: string | null;
+  media_type: 'anime' | 'manga' | 'novel';
+  total_volumes: number | null;
+  watched_volumes: number;
+  duration: number | null;
+  priority: number | null;
+  tags: string[];
+  rewatching: boolean;
+  reminder_snoozed_until: string | null;
+  last_reminded_at: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export interface Rewatch { id: number; anime_id: string; finished_at: string; note: string | null }
 
 /** Entrada a importar, venga de AniList o de MyAnimeList. */
 interface ImportEntry {
@@ -65,6 +76,8 @@ export class AnimesService {
     if (error.code === '23514') throw new BadRequestException('Los capítulos vistos no pueden superar el total');
     if (error.code === 'PGRST116') throw new NotFoundException('Anime no encontrado');
     if (error.code === '23505') throw new ConflictException('Ese anime ya está en tu lista');
+    if (error.code === 'P0002') throw new NotFoundException(error.message);
+    if (error.code === '22023') throw new BadRequestException(error.message);
     throw new BadRequestException(error.message);
   }
 
@@ -72,6 +85,8 @@ export class AnimesService {
     let query = this.table(token).select('*').order('updated_at', { ascending: false });
     if (q.favorite) query = query.eq('is_favorite', true);
     if (q.status) query = query.eq('status', q.status);
+    if (q.media) query = query.eq('media_type', q.media);
+    if (q.tag) query = query.contains('tags', [q.tag]);
     if (q.search) query = query.ilike('title', `%${q.search.replace(/[%_]/g, '\\$&')}%`);
     const { data, error } = await query;
     if (error) this.fail(error);
@@ -103,11 +118,135 @@ export class AnimesService {
     const row = this.normalize(dto, current);
     const { data, error } = await this.table(token).update(row).eq('id', id).select().single();
     if (error) this.fail(error);
-    const updated = data as Anime;
+    let updated = data as Anime;
+    updated = await this.afterProgress(token, current, updated);
     const changed = updated.watched_episodes !== current.watched_episodes
       || updated.status !== current.status || updated.score !== current.score;
     if (changed) await this.pushToAniList(token, updated);
     return updated;
+  }
+
+  /** Si estabas en un rewatch y llegaste al final, lo registra y cierra el rewatch. */
+  private async afterProgress(token: string, before: Pick<Anime, 'status'>, after: Anime): Promise<Anime> {
+    if (!after.rewatching || after.status !== AnimeStatus.Completed || before.status === AnimeStatus.Completed) return after;
+    const db = this.supabase.forUser(token);
+    const { error } = await db.from('rewatches').insert({ anime_id: after.id, user_id: after.user_id });
+    if (error) this.fail(error);
+    const { data, error: upErr } = await this.table(token).update({ rewatching: false }).eq('id', after.id).select().single();
+    if (upErr) this.fail(upErr);
+    return data as Anime;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Marcado por rango, rewatch, "Planeo ver" y recordatorios
+  // ---------------------------------------------------------------------------------------------
+
+  /** "Vi del 5 al 12": registra cada capítulo en el historial (cuenta para la racha) y avanza el progreso. */
+  async markRange(token: string, id: string, from: number, to: number, watchedAt?: string): Promise<{ anime: Anime; logged: number }> {
+    if (to < from) throw new BadRequestException('El capítulo final debe ser mayor o igual al inicial');
+    const before = await this.findOne(token, id);
+    const at = watchedAt ? new Date(watchedAt) : new Date();
+    if (Number.isNaN(at.getTime())) throw new BadRequestException('Fecha inválida');
+    const { data, error } = await this.supabase.forUser(token).rpc('mark_episode_range', {
+      p_anime: id, p_from: from, p_to: to, p_watched_at: at.toISOString(),
+    });
+    if (error) this.fail(error);
+    let anime = await this.findOne(token, id);
+    anime = await this.afterProgress(token, before, anime);
+    if (anime.watched_episodes !== before.watched_episodes || anime.status !== before.status) await this.pushToAniList(token, anime);
+    return { anime, logged: Number(data) || 0 };
+  }
+
+  /** Empieza a ver de nuevo: progreso a 0 y estado "viendo" (al terminar se suma al contador). */
+  async startRewatch(token: string, id: string): Promise<Anime> {
+    await this.findOne(token, id);
+    const { data, error } = await this.table(token)
+      .update({ watched_episodes: 0, watched_volumes: 0, status: AnimeStatus.Watching, rewatching: true })
+      .eq('id', id).select().single();
+    if (error) this.fail(error);
+    await this.pushToAniList(token, data as Anime);
+    return data as Anime;
+  }
+
+  async cancelRewatch(token: string, id: string): Promise<Anime> {
+    const a = await this.findOne(token, id);
+    const { data, error } = await this.table(token)
+      .update({ rewatching: false, status: AnimeStatus.Completed, watched_episodes: a.total_episodes ?? a.watched_episodes })
+      .eq('id', id).select().single();
+    if (error) this.fail(error);
+    return data as Anime;
+  }
+
+  async rewatches(token: string, id?: string): Promise<Rewatch[]> {
+    let q = this.supabase.forUser(token).from('rewatches').select('id, anime_id, finished_at, note').order('finished_at', { ascending: false });
+    if (id) q = q.eq('anime_id', id);
+    const { data, error } = await q;
+    if (error) this.fail(error);
+    return data as Rewatch[];
+  }
+
+  /** Registra un rewatch pasado ("lo volví a ver en 2023"). */
+  async addRewatch(token: string, userId: string, id: string, finishedAt?: string, note?: string): Promise<Rewatch> {
+    await this.findOne(token, id);
+    const { data, error } = await this.supabase.forUser(token).from('rewatches')
+      .insert({ anime_id: id, user_id: userId, finished_at: finishedAt ? new Date(finishedAt).toISOString() : undefined, note: note || null })
+      .select('id, anime_id, finished_at, note').single();
+    if (error) this.fail(error);
+    return data as Rewatch;
+  }
+
+  async removeRewatch(token: string, rewatchId: number) {
+    const { error, count } = await this.supabase.forUser(token).from('rewatches').delete({ count: 'exact' }).eq('id', rewatchId);
+    if (error) this.fail(error);
+    if (!count) throw new NotFoundException('Rewatch no encontrado');
+  }
+
+  /** Guarda el orden de "Planeo ver" (arrastrar y soltar). */
+  async reorder(token: string, ids: string[]) {
+    await this.applyUpdates(token, ids.map((id, i) => ({ id, row: { priority: i } })));
+    return { ok: true, count: ids.length };
+  }
+
+  /** Etiquetas usadas, con cuántos títulos tiene cada una. */
+  async tags(token: string) {
+    const { data, error } = await this.table(token).select('tags');
+    if (error) this.fail(error);
+    const counts = new Map<string, number>();
+    for (const r of (data ?? []) as { tags: string[] }[]) for (const t of r.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+    return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  }
+
+  private async staleWeeks(token: string): Promise<number> {
+    const { data } = await this.supabase.forUser(token).from('profiles').select('stale_weeks').maybeSingle();
+    return (data as { stale_weeks: number } | null)?.stale_weeks ?? 3;
+  }
+
+  /** Series en "viendo" sin avance hace más de N semanas (configurable en Ajustes), sin posponer. */
+  async stale(token: string) {
+    const weeks = await this.staleWeeks(token);
+    const now = Date.now();
+    const limit = now - weeks * 7 * 86_400_000;
+    const rows = await this.list(token, { status: AnimeStatus.Watching });
+    return {
+      weeks,
+      items: rows
+        .filter((a) => new Date(a.last_watched_at ?? a.updated_at).getTime() < limit)
+        .filter((a) => !a.reminder_snoozed_until || new Date(a.reminder_snoozed_until).getTime() < now)
+        .map((a) => ({ ...a, idle_days: Math.floor((now - new Date(a.last_watched_at ?? a.updated_at).getTime()) / 86_400_000) }))
+        .sort((a, b) => b.idle_days - a.idle_days),
+    };
+  }
+
+  /** "¿Lo retomas o lo dejas?" — retomar/posponer silencia el aviso N semanas; dejar lo marca como abandonado. */
+  async staleAction(token: string, id: string, action: 'resume' | 'drop' | 'snooze'): Promise<Anime> {
+    const current = await this.findOne(token, id);
+    if (action === 'drop') return this.update(token, id, { status: AnimeStatus.Dropped });
+    const weeks = await this.staleWeeks(token);
+    const { data, error } = await this.table(token)
+      .update({ reminder_snoozed_until: new Date(Date.now() + weeks * 7 * 86_400_000).toISOString() })
+      .eq('id', current.id).select().single();
+    if (error) this.fail(error);
+    return data as Anime;
   }
 
   async remove(token: string, id: string): Promise<void> {
@@ -149,7 +288,7 @@ export class AnimesService {
       await this.anilist.saveListEntry(anilistToken, {
         mediaId: a.anilist_id,
         progress: a.watched_episodes,
-        status: TO_ANILIST_STATUS[a.status],
+        status: a.rewatching && a.status === AnimeStatus.Watching ? 'REPEATING' : TO_ANILIST_STATUS[a.status],
         score: a.score,
       });
     } catch (e) {
@@ -325,7 +464,7 @@ ${entries}
    */
   async syncEpisodes(token: string, opts: { ids?: string[]; force?: boolean } = {}) {
     let query = this.table(token).select(
-      'id, title, title_romaji, anilist_id, total_episodes, watched_episodes, cover_url, airing_status, episodes_synced_at, format',
+      'id, title, title_romaji, anilist_id, total_episodes, watched_episodes, cover_url, airing_status, episodes_synced_at, format, media_type, duration',
     );
     if (opts.ids?.length) query = query.in('id', opts.ids);
     const { data, error } = await query;
@@ -336,6 +475,9 @@ ${entries}
     const stale = (a: Anime) => {
       if (opts.force || !a.episodes_synced_at) return true;
       if (a.anilist_id && (!a.format || !a.title_romaji)) return true; // aún sin metadatos (géneros, romaji…)
+      // Sin duración por capítulo (necesaria para calcular el tiempo de "Planeo ver"): reintenta cada hora
+      if (a.anilist_id && a.media_type === 'anime' && a.duration === null && a.format !== 'MUSIC'
+        && now - new Date(a.episodes_synced_at).getTime() > 3600_000) return true;
       const age = now - new Date(a.episodes_synced_at).getTime();
       return age > (a.airing_status === 'RELEASING' || a.airing_status === 'NOT_YET_RELEASED' ? 6 : 7 * 24) * 3600_000;
     };
@@ -345,7 +487,7 @@ ${entries}
     const newLinks = new Map<string, number>();
     const unlinked = candidates.filter((a) => !a.anilist_id && a.total_episodes === null).slice(0, 5);
     for (const a of unlinked) {
-      const results = await this.anilist.search(a.title);
+      const results = await this.anilist.search(a.title, a.media_type ?? 'anime');
       const t = normTitle(a.title);
       const hit = results.find(
         (r) => [r.title, r.title_romaji, r.title_english].some((x) => x && normTitle(x) === t) && !usedIds.has(r.anilist_id),
@@ -397,7 +539,8 @@ ${entries}
    * Máximo 60 por llamada; se recalcula cada 30 días (por si se anuncian temporadas nuevas).
    */
   async syncFranchises(token: string, opts: { ids?: string[]; force?: boolean } = {}): Promise<number> {
-    let query = this.table(token).select('id, anilist_id, franchise_id, season_number, franchise_synced_at').not('anilist_id', 'is', null);
+    let query = this.table(token).select('id, anilist_id, franchise_id, season_number, franchise_synced_at')
+      .not('anilist_id', 'is', null).eq('media_type', 'anime');
     if (opts.ids?.length) query = query.in('id', opts.ids);
     const { data, error } = await query;
     if (error) this.fail(error);
@@ -442,6 +585,7 @@ ${entries}
       return [{
         user_id: userId, title: m.title, anilist_id: m.anilist_id, total_episodes: m.total_episodes,
         watched_episodes: i.status === AnimeStatus.Completed && m.total_episodes ? m.total_episodes : 0,
+        total_volumes: m.total_volumes,
         status: i.status, cover_url: m.cover_url, source_url: m.site_url,
         ...metadataFields(m),
         franchise_id: f?.root ?? m.anilist_id, season_number: entry?.season_number ?? null, franchise_synced_at: now,
@@ -500,6 +644,13 @@ ${entries}
       review: merged.review || null,
       last_episode_url: merged.last_episode_url || null,
       anilist_id: merged.anilist_id ?? null,
+      media_type: merged.media_type ?? 'anime',
+      total_volumes: merged.total_volumes ?? null,
+      watched_volumes: Math.max(0, merged.watched_volumes ?? 0),
+      tags: cleanTags(merged.tags ?? []),
+      ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
+      // Avanzar una serie reinicia el aviso de "¿la retomas o la dejas?"
+      ...(progressChanged ? { reminder_snoozed_until: null } : {}),
       ...(progressChanged && watched > 0 ? { last_watched_at: new Date().toISOString() } : {}),
     };
   }
@@ -542,8 +693,24 @@ function normTitle(t: string): string {
   return t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 }
 
+/** Etiquetas sin espacios sobrantes, sin repetir (sin distinguir mayúsculas), máx. 20. */
+function cleanTags(tags: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of tags) {
+    const t = raw.trim().replace(/\s+/g, ' ').slice(0, 30);
+    if (!t || seen.has(t.toLowerCase())) continue;
+    seen.add(t.toLowerCase());
+    out.push(t);
+  }
+  return out.slice(0, 20);
+}
+
 function metadataFields(m: CatalogAnime) {
   return {
+    media_type: m.media_type,
+    duration: m.duration,
+    ...(m.total_volumes !== null ? { total_volumes: m.total_volumes } : {}),
     airing_status: m.airing_status,
     aired_episodes: m.aired_episodes,
     next_episode_at: m.next_episode_at,

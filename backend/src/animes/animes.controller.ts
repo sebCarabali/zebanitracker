@@ -5,7 +5,10 @@ import type { Response } from 'express';
 import { SupabaseAuthGuard } from '../auth/auth.guard.js';
 import { AccessToken, UserId } from '../auth/current-user.decorator.js';
 import { AnimesService } from './animes.service.js';
-import { AddManyDto, CreateAnimeDto, ImportAniListDto, ImportMalDto, ListAnimesQuery, SetProgressDto, SyncEpisodesDto, UpdateAnimeDto } from './dto/anime.dto.js';
+import {
+  AddManyDto, CreateAnimeDto, ImportAniListDto, ImportMalDto, ListAnimesQuery, MarkRangeDto, ReorderDto, RewatchDto, SetProgressDto,
+  StaleActionDto, SyncEpisodesDto, UpdateAnimeDto,
+} from './dto/anime.dto.js';
 
 @Controller('animes')
 @UseGuards(SupabaseAuthGuard)
@@ -21,6 +24,36 @@ export class AnimesController {
   @Get('activity')
   activity(@AccessToken() token: string, @Query('days', new DefaultValuePipe(365), ParseIntPipe) days: number) {
     return this.animes.activity(token, Math.min(Math.max(days, 1), 400));
+  }
+
+  /** Series sin avance hace semanas: "¿Lo retomas o lo dejas?". */
+  @Get('stale')
+  stale(@AccessToken() token: string) {
+    return this.animes.stale(token);
+  }
+
+  /** Etiquetas / listas personalizadas con su número de títulos. */
+  @Get('tags')
+  tags(@AccessToken() token: string) {
+    return this.animes.tags(token);
+  }
+
+  /** Todos los rewatches (para estadísticas). */
+  @Get('rewatches')
+  allRewatches(@AccessToken() token: string) {
+    return this.animes.rewatches(token);
+  }
+
+  @Delete('rewatches/:rewatchId')
+  @HttpCode(204)
+  removeRewatch(@AccessToken() token: string, @Param('rewatchId', ParseIntPipe) rewatchId: number) {
+    return this.animes.removeRewatch(token, rewatchId);
+  }
+
+  /** Orden de "Planeo ver". */
+  @Post('reorder')
+  reorder(@AccessToken() token: string, @Body() dto: ReorderDto) {
+    return this.animes.reorder(token, dto.ids);
   }
 
   /** Recomendaciones y secuelas pendientes. */
@@ -101,6 +134,39 @@ export class AnimesController {
   @Patch(':id/progress')
   setProgress(@AccessToken() token: string, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SetProgressDto) {
     return this.animes.setProgress(token, id, dto.episode, dto.url);
+  }
+
+  /** "Vi del 5 al 12" (cada capítulo queda en el historial y cuenta para la racha). */
+  @Post(':id/progress/range')
+  markRange(@AccessToken() token: string, @Param('id', ParseUUIDPipe) id: string, @Body() dto: MarkRangeDto) {
+    return this.animes.markRange(token, id, dto.from, dto.to, dto.watched_at);
+  }
+
+  @Post(':id/stale')
+  staleAction(@AccessToken() token: string, @Param('id', ParseUUIDPipe) id: string, @Body() dto: StaleActionDto) {
+    return this.animes.staleAction(token, id, dto.action);
+  }
+
+  @Get(':id/rewatches')
+  rewatches(@AccessToken() token: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.animes.rewatches(token, id);
+  }
+
+  /** Registra un rewatch ya terminado (con fecha). */
+  @Post(':id/rewatches')
+  addRewatch(@AccessToken() token: string, @UserId() userId: string, @Param('id', ParseUUIDPipe) id: string, @Body() dto: RewatchDto) {
+    return this.animes.addRewatch(token, userId, id, dto.finished_at, dto.note);
+  }
+
+  /** Empieza un rewatch: progreso a 0; al terminar se suma al contador. */
+  @Post(':id/rewatch/start')
+  startRewatch(@AccessToken() token: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.animes.startRewatch(token, id);
+  }
+
+  @Post(':id/rewatch/cancel')
+  cancelRewatch(@AccessToken() token: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.animes.cancelRewatch(token, id);
   }
 
   @Post(':id/progress/next')

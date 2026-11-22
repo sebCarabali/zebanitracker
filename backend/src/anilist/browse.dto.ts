@@ -7,6 +7,7 @@ export enum MediaSeason { Winter = 'WINTER', Spring = 'SPRING', Summer = 'SUMMER
 
 export enum MediaFormat {
   TV = 'TV', TVShort = 'TV_SHORT', Movie = 'MOVIE', Special = 'SPECIAL', OVA = 'OVA', ONA = 'ONA', Music = 'MUSIC',
+  Manga = 'MANGA', Novel = 'NOVEL', OneShot = 'ONE_SHOT',
 }
 
 export enum MediaStatus {
@@ -25,7 +26,12 @@ const csv = ({ value }: { value: unknown }) =>
     .map((v) => String(v).trim())
     .filter(Boolean);
 
+export enum MediaKindParam { Anime = 'anime', Manga = 'manga', Novel = 'novel' }
+
 export class BrowseQuery {
+  @IsOptional() @IsEnum(MediaKindParam)
+  media?: MediaKindParam;
+
   @IsOptional() @IsString() @MaxLength(100)
   search?: string;
 

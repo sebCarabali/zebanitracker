@@ -24,7 +24,17 @@ export interface CatalogAnime {
   next_episode: number | null;
   mal_id: number | null;
   studios: string[];
+  /** anime | manga | novel */
+  media_type: MediaKind;
+  /** Volúmenes (solo manga y novelas). */
+  total_volumes: number | null;
+  /** Minutos por capítulo (solo anime). */
+  duration: number | null;
 }
+
+export type MediaKind = 'anime' | 'manga' | 'novel';
+/** Tipo de AniList para cada clase de medio. */
+export const ANILIST_TYPE: Record<MediaKind, 'ANIME' | 'MANGA'> = { anime: 'ANIME', manga: 'MANGA', novel: 'MANGA' };
 
 export interface FranchiseEntry {
   media: CatalogAnime;
@@ -47,6 +57,15 @@ export interface BrowseFilters {
   status?: string;
   sort?: string;
   page?: number;
+  /** anime (por defecto), manga o novel */
+  media?: MediaKind;
+  excludeGenres?: string[];
+  yearFrom?: number;
+  yearTo?: number;
+  episodesMin?: number;
+  episodesMax?: number;
+  minScore?: number;
+  perPage?: number;
 }
 
 export interface BrowseResult {
@@ -68,6 +87,8 @@ export interface AnimeDetails extends CatalogAnime {
   popularity: number | null;
   tags: string[];
   trailer_url: string | null;
+  /** Títulos de capítulos (cuando AniList los tiene, p. ej. de Crunchyroll). */
+  episode_titles: string[];
   relations: { anilist_id: number; title: string; relation: string; format: string | null; cover_url: string | null }[];
 }
 
@@ -86,8 +107,12 @@ export interface AniListEntry {
 
 interface RawMedia {
   id: number;
+  type?: 'ANIME' | 'MANGA' | null;
   title: { romaji: string | null; english: string | null };
   episodes: number | null;
+  chapters?: number | null;
+  volumes?: number | null;
+  duration?: number | null;
   coverImage: { large: string | null } | null;
   siteUrl: string;
   format: string | null;
@@ -103,8 +128,12 @@ interface RawMedia {
 
 const MEDIA_FIELDS = `
   id
+  type
   title { romaji english }
   episodes
+  chapters
+  volumes
+  duration
   coverImage { large }
   siteUrl
   format
@@ -119,9 +148,9 @@ const MEDIA_FIELDS = `
 `;
 
 const SEARCH_QUERY = `
-query ($search: String) {
+query ($search: String, $type: MediaType, $formats: [MediaFormat], $notFormats: [MediaFormat]) {
   Page(perPage: 8) {
-    media(search: $search, type: ANIME, sort: SEARCH_MATCH, isAdult: false) { ${MEDIA_FIELDS} }
+    media(search: $search, type: $type, format_in: $formats, format_not_in: $notFormats, sort: SEARCH_MATCH, isAdult: false) { ${MEDIA_FIELDS} }
   }
 }`;
 
@@ -136,26 +165,30 @@ query ($userName: String) {
 }`;
 
 const BROWSE_QUERY = `
-query ($page: Int, $search: String, $genres: [String], $tags: [String], $year: Int, $season: MediaSeason,
-       $formats: [MediaFormat], $status: MediaStatus, $sort: [MediaSort]) {
-  Page(page: $page, perPage: 24) {
+query ($page: Int, $perPage: Int, $type: MediaType, $search: String, $genres: [String], $notGenres: [String], $tags: [String],
+       $year: Int, $season: MediaSeason, $formats: [MediaFormat], $notFormats: [MediaFormat], $status: MediaStatus, $sort: [MediaSort],
+       $startFrom: FuzzyDateInt, $startTo: FuzzyDateInt, $epMin: Int, $epMax: Int, $chMin: Int, $chMax: Int, $minScore: Int) {
+  Page(page: $page, perPage: $perPage) {
     pageInfo { hasNextPage total }
-    media(type: ANIME, isAdult: false, search: $search, genre_in: $genres, tag_in: $tags, seasonYear: $year,
-          season: $season, format_in: $formats, status: $status, sort: $sort) { ${MEDIA_FIELDS} }
+    media(type: $type, isAdult: false, search: $search, genre_in: $genres, genre_not_in: $notGenres, tag_in: $tags, seasonYear: $year,
+          season: $season, format_in: $formats, format_not_in: $notFormats, status: $status, sort: $sort,
+          startDate_greater: $startFrom, startDate_lesser: $startTo, episodes_greater: $epMin, episodes_lesser: $epMax,
+          chapters_greater: $chMin, chapters_lesser: $chMax, averageScore_greater: $minScore) { ${MEDIA_FIELDS} }
   }
 }`;
 
 const BY_IDS_QUERY = `
 query ($ids: [Int]) {
   Page(perPage: 50) {
-    media(id_in: $ids, type: ANIME) { ${MEDIA_FIELDS} }
+    media(id_in: $ids) { ${MEDIA_FIELDS} }
   }
 }`;
 
 const DETAILS_QUERY = `
 query ($id: Int) {
-  Media(id: $id, type: ANIME) {
+  Media(id: $id) {
     ${MEDIA_FIELDS}
+    streamingEpisodes { title }
     description(asHtml: false)
     bannerImage
     coverImage { extraLarge large }
@@ -282,12 +315,14 @@ export class AniListService {
   }
 
   private static normalize(m: RawMedia): CatalogAnime {
+    const isBook = m.type === 'MANGA';
+    const units = isBook ? m.chapters ?? null : m.episodes;
     return {
       anilist_id: m.id,
       title: m.title.english || m.title.romaji || `AniList #${m.id}`,
       title_romaji: m.title.romaji,
       title_english: m.title.english,
-      total_episodes: m.episodes,
+      total_episodes: units,
       cover_url: m.coverImage?.large ?? null,
       site_url: m.siteUrl,
       format: m.format,
@@ -298,20 +333,30 @@ export class AniListService {
       score: m.averageScore ?? null,
       aired_episodes: m.nextAiringEpisode
         ? m.nextAiringEpisode.episode - 1
-        : m.status === 'FINISHED' ? m.episodes : null,
+        : m.status === 'FINISHED' ? units : null,
       next_episode_at: m.nextAiringEpisode ? new Date(m.nextAiringEpisode.airingAt * 1000).toISOString() : null,
       next_episode: m.nextAiringEpisode?.episode ?? null,
       mal_id: m.idMal ?? null,
       studios: m.studios?.nodes.map((n) => n.name) ?? [],
+      media_type: isBook ? (m.format === 'NOVEL' ? 'novel' : 'manga') : 'anime',
+      total_volumes: isBook ? m.volumes ?? null : null,
+      duration: isBook ? null : m.duration ?? null,
     };
   }
 
-  async search(term: string): Promise<CatalogAnime[]> {
-    const key = term.trim().toLowerCase();
+  /** Variables de tipo/formato para buscar anime, manga (sin novelas) o novelas. */
+  private static kindVars(kind: MediaKind = 'anime', formats?: string[]) {
+    if (kind === 'novel') return { type: 'MANGA', formats: ['NOVEL'] };
+    if (kind === 'manga') return { type: 'MANGA', formats: formats?.length ? formats : undefined, notFormats: formats?.length ? undefined : ['NOVEL'] };
+    return { type: 'ANIME', formats: formats?.length ? formats : undefined };
+  }
+
+  async search(term: string, kind: MediaKind = 'anime'): Promise<CatalogAnime[]> {
+    const key = `${kind}:${term.trim().toLowerCase()}`;
     const hit = this.cache.get(key);
     if (hit && Date.now() - hit.at < AniListService.TTL_MS) return hit.data;
 
-    const data = await this.query<{ Page: { media: RawMedia[] } }>(SEARCH_QUERY, { search: term.trim() });
+    const data = await this.query<{ Page: { media: RawMedia[] } }>(SEARCH_QUERY, { search: term.trim(), ...AniListService.kindVars(kind) });
     const results = data.Page.media.map(AniListService.normalize);
 
     if (this.cache.size >= AniListService.MAX_CACHE) this.cache.delete(this.cache.keys().next().value!);
@@ -322,16 +367,24 @@ export class AniListService {
   /** Explorar el catálogo con filtros (búsqueda, géneros, etiquetas, año, temporada, formato, estado). */
   async browse(f: BrowseFilters): Promise<BrowseResult> {
     const page = f.page ?? 1;
+    const isBook = f.media === 'manga' || f.media === 'novel';
     const variables: Record<string, unknown> = {
       page,
+      perPage: f.perPage ?? 24,
+      ...AniListService.kindVars(f.media, f.formats),
       search: f.search?.trim() || undefined,
       genres: f.genres?.length ? f.genres : undefined,
+      notGenres: f.excludeGenres?.length ? f.excludeGenres : undefined,
       tags: f.tags?.length ? f.tags : undefined,
-      year: f.year,
-      season: f.season,
-      formats: f.formats?.length ? f.formats : undefined,
+      year: isBook ? undefined : f.year,
+      season: isBook ? undefined : f.season,
       status: f.status,
       sort: [f.sort ?? (f.search ? 'SEARCH_MATCH' : 'POPULARITY_DESC')],
+      startFrom: f.yearFrom ? f.yearFrom * 10000 : isBook && f.year ? f.year * 10000 : undefined,
+      startTo: f.yearTo ? (f.yearTo + 1) * 10000 : isBook && f.year ? (f.year + 1) * 10000 : undefined,
+      [isBook ? 'chMin' : 'epMin']: f.episodesMin ? f.episodesMin - 1 : undefined,
+      [isBook ? 'chMax' : 'epMax']: f.episodesMax ? f.episodesMax + 1 : undefined,
+      minScore: f.minScore ? f.minScore - 1 : undefined,
     };
     const key = 'browse:' + JSON.stringify(variables);
     const hit = this.browseCache.get(key);
@@ -378,6 +431,7 @@ export class AniListService {
       endDate: { year: number | null; month: number | null; day: number | null } | null;
       tags: { name: string; rank: number; isMediaSpoiler: boolean; isAdult: boolean }[] | null;
       trailer: { id: string; site: string } | null;
+      streamingEpisodes: { title: string }[] | null;
       relations: { edges: { relationType: string; node: { id: number; type: string; format: string | null; title: { romaji: string | null; english: string | null }; coverImage: { large: string | null } | null } }[] } | null;
     };
     const data = await this.query<{ Media: Raw | null }>(DETAILS_QUERY, { id });
@@ -399,8 +453,9 @@ export class AniListService {
       popularity: m.popularity,
       tags: (m.tags ?? []).filter((t) => !t.isMediaSpoiler && !t.isAdult && t.rank >= 60).slice(0, 8).map((t) => t.name),
       trailer_url: m.trailer?.site === 'youtube' ? `https://www.youtube.com/watch?v=${m.trailer.id}` : null,
+      episode_titles: (m.streamingEpisodes ?? []).map((e) => e.title).filter(Boolean).slice(0, 300),
       relations: (m.relations?.edges ?? [])
-        .filter((e) => e.node.type === 'ANIME')
+        .filter((e) => e.node.type === (m.type ?? 'ANIME'))
         .slice(0, 8)
         .map((e) => ({
           anilist_id: e.node.id,

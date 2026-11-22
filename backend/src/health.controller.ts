@@ -59,7 +59,37 @@ export class HealthController {
       sample: results[0]?.title ?? null,
       browse: { total: browse.total, first: browse.results[0]?.title ?? null },
       filters: { genres: filters.genres.length, tags: filters.tags.length },
+      media: await this.mediaCheck().catch((e) => ({ error: (e as Error).message })),
     };
+  }
+
+  /** Manga, novelas y filtros nuevos (duración, rango de capítulos y años). */
+  private async mediaCheck() {
+    const [manga, novel, short, mangaBrowse] = await Promise.all([
+      this.anilist.search('berserk', 'manga'),
+      this.anilist.search('mushoku tensei', 'novel'),
+      this.anilist.browse({ media: 'anime', genres: ['Romance'], episodesMax: 13, yearFrom: 2018, sort: 'SCORE_DESC', perPage: 3 }),
+      this.anilist.browse({ media: 'manga', genres: ['Mystery'], perPage: 3 }),
+    ]);
+    const det = await this.anilist.details(154587).catch(() => null);
+    return {
+      manga: manga.slice(0, 2).map((m) => `${m.title} [${m.media_type}] ${m.total_episodes ?? '?'} caps / ${m.total_volumes ?? '?'} vols`),
+      novel: novel.slice(0, 2).map((m) => `${m.title} [${m.media_type}/${m.format}]`),
+      short_romance: short.results.map((m) => `${m.title} (${m.total_episodes} caps, ${m.year}, ${m.duration} min)`),
+      manga_browse: mangaBrowse.results.map((m) => `${m.title} [${m.media_type}]`),
+      episode_titles: det ? det.episode_titles.slice(0, 2) : null,
+      ok: manga[0]?.media_type === 'manga' && novel[0]?.media_type === 'novel' && short.results.length > 0
+        && short.results.every((m) => (m.total_episodes ?? 0) <= 13),
+    };
+  }
+
+  /** Prueba de la búsqueda en lenguaje natural (solo interpretación de filtros). Limitado. */
+  @Get('ai-search')
+  async aiSearchCheck(@Headers('x-vercel-oidc-token') oidc?: string) {
+    this.ai.limit('health', 'ai-search', 48);
+    const f = await this.anilist.filterOptions();
+    const intent = await this.ai.searchIntent(oidc, 'algo como Frieren pero más corto y con romance', f.genres, f.tags.map((t) => t.name));
+    return { ok: !!intent, intent, model: this.ai.modelId };
   }
 }
 
