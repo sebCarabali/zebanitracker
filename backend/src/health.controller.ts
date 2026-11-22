@@ -18,9 +18,18 @@ export class HealthController {
     const started = Date.now();
     try {
       const text = await this.ai.translate(oidc, 'The adventure is over but life goes on for an elf mage.', 'es');
-      return { ok: true, model: this.ai.modelId, ms: Date.now() - started, sample: text, auth: process.env.AI_GATEWAY_API_KEY ? 'api-key' : oidc ? 'oidc' : 'none' };
+      const rec = await this.ai.recommend(oidc, {
+        lang: 'es', count: 2,
+        profile: 'Favoritos: Frieren (10/10) [Adventure, Fantasy]; Mushishi (9/10) [Slice of Life, Supernatural]\nAbandonados: Highschool DxD [Ecchi]',
+        candidates: [
+          { anilist_id: 1, title: 'Natsume Yuujinchou', year: 2008, format: 'TV', episodes: 13, genres: ['Slice of Life', 'Supernatural'], score: 85, source: 'prueba' },
+          { anilist_id: 2, title: 'Shinmai Maou no Testament', year: 2015, format: 'TV', episodes: 12, genres: ['Ecchi', 'Fantasy'], score: 60, source: 'prueba' },
+          { anilist_id: 3, title: 'Made in Abyss', year: 2017, format: 'TV', episodes: 13, genres: ['Adventure', 'Fantasy'], score: 86, source: 'prueba' },
+        ],
+      });
+      return { ok: rec.picks.length > 0, recommend: rec, provider: this.ai.provider, model: this.ai.modelId, ms: Date.now() - started, sample: text, groq_models: await groqModels() };
     } catch (e) {
-      return { ok: false, model: this.ai.modelId, error: (e as Error).message, detail: 'Ver logs: AI Gateway', auth: process.env.AI_GATEWAY_API_KEY ? 'api-key' : oidc ? 'oidc' : 'none' };
+      return { ok: false, provider: this.ai.provider, model: this.ai.modelId, error: (e as Error).message, groq_models: await groqModels() };
     }
   }
 
@@ -51,5 +60,19 @@ export class HealthController {
       browse: { total: browse.total, first: browse.results[0]?.title ?? null },
       filters: { genres: filters.genres.length, tags: filters.tags.length },
     };
+  }
+}
+
+/** Modelos de chat disponibles en la cuenta de Groq (para elegir AI_MODEL). */
+async function groqModels(): Promise<string[] | null> {
+  if (!process.env.GROQ_API_KEY) return null;
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` }, signal: AbortSignal.timeout(5000),
+    });
+    const body = (await res.json()) as { data?: { id: string; active?: boolean }[] };
+    return (body.data ?? []).filter((m) => m.active !== false).map((m) => m.id).sort();
+  } catch {
+    return null;
   }
 }

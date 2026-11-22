@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.152",
+    "@ai-sdk/groq": "^4.0.86",
     "@nestjs/common": "^12.5.0",
     "@nestjs/config": "^12.1.1",
     "@nestjs/core": "^12.5.0",
